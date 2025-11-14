@@ -140,4 +140,4 @@ MIT
 
 - **Documentation**: [docs.sniff.to](https://docs.sniff.to)
 - **Discord**: [discord.gg/huk9sSQCJA](https://discord.gg/huk9sSQCJA)
-- **Issues**: [github.com/caiopizzol/sniff/issues](https://github.com/caiopizzol/sniff/issues)
+- **Issues**: [github.com/sniff-dev/sniff/issues](https://github.com/sniff-dev/sniff/issues)

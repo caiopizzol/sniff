@@ -5,7 +5,7 @@
 The official CLI for [Sniff](https://sniff.to) - the fastest way to deploy custom AI agents to Linear without building infrastructure.
 
 [![npm version](https://img.shields.io/npm/v/@sniff-dev/cli.svg)](https://www.npmjs.com/package/@sniff-dev/cli)
-[![License](https://img.shields.io/npm/l/@sniff-dev/cli.svg)](https://github.com/caiopizzol/sniff/blob/main/LICENSE)
+[![License](https://img.shields.io/npm/l/@sniff-dev/cli.svg)](https://github.com/sniff-dev/sniff/blob/main/LICENSE)
 
 ## Why Sniff?
 
