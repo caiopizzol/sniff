@@ -1,0 +1,13 @@
+# Source and config
+src/
+tsconfig.json
+
+# Development
+.env*
+*.log
+
+# Release config
+.releaserc.cjs
+
+# CI/CD
+.github/

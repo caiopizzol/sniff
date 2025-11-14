@@ -201,5 +201,7 @@ export interface ApiResponse<T = any> {
 }
 
 // Package info
+/** Current package version */
 export const VERSION = '0.1.0';
+/** API version used for compatibility */
 export const API_VERSION = 'v1';
