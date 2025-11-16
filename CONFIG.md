@@ -11,6 +11,37 @@ The Sniff configuration file (`config.yml`) defines an AI agent's identity, beha
 - **Location**: `./config.yml` (configurable via `CONFIG_FILE` env var)
 - **Schema Version**: 1.0
 
+## Environment Variable Interpolation
+
+Configuration values can reference environment variables using the `${VAR_NAME}` syntax. This is useful for:
+
+- Keeping secrets out of version control
+- Different values per environment (dev/staging/prod)
+- Third-party API keys and tokens
+
+**Syntax**:
+
+```yaml
+# Required env var (error if not set)
+api_key: ${API_KEY}
+
+# Optional env var with default value
+url: ${API_URL:-https://default.com}
+name: ${AGENT_NAME:-Default Agent}
+```
+
+**Rules**:
+
+- Environment variables must be UPPERCASE with underscores (`A-Z`, `0-9`, `_`)
+- Use `${VAR_NAME}` for required variables (will error if not set)
+- Use `${VAR_NAME:-default}` to provide a default value
+- Interpolation happens before YAML parsing and validation
+- Only string fields support interpolation (numbers, booleans must be literal)
+
+**Security Best Practice**:
+
+⚠️ **Never commit secrets to version control**. Use environment variables for sensitive data like API keys, tokens, and credentials. Store these in `.env` files (and add `.env` to `.gitignore`) or use your deployment platform's secrets management.
+
 ## Top-Level Structure
 
 ```yaml
@@ -457,6 +488,7 @@ agent:
 - `type` (required): Must be `"url"` (currently only URL-based MCP servers are supported)
 - `url` (required): URL of the MCP server endpoint
 - `name` (required): Human-readable name for the MCP server (1-100 characters)
+- `authorization_token` (optional): Bearer token for authenticating with third-party MCP servers. **Use environment variables** for this field to avoid committing secrets
 - `tool_configuration` (optional): Controls which tools from the MCP server are available
   - `enabled` (optional): Whether tools from this server are enabled (defaults to true)
   - `allowed_tools` (optional): Array of specific tool names to enable. When specified, only these tools will be available
@@ -469,7 +501,10 @@ agent:
   - `list_issues`: List issues with optional filtering
   - `search_issues`: Search issues by text query
 
-**Authentication**: MCP servers use user authentication context. Users must connect their integration accounts via OAuth before the agent can use these tools (e.g., `sniff connect linear`).
+**Authentication**:
+
+- **Sniff MCP servers** (e.g., Linear, GitHub): Use user authentication context via OAuth. Users must connect their integration accounts before the agent can use these tools (e.g., `sniff connect linear`). No `authorization_token` needed - authentication is handled automatically.
+- **Third-party MCP servers**: Require an `authorization_token` field with a Bearer token. Use environment variables to provide API keys securely (see examples below).
 
 **Use Cases**:
 
@@ -503,6 +538,44 @@ agent:
         name: 'GitHub Integration'
         tool_configuration:
           allowed_tools: ['search_issues', 'get_pull_request']
+```
+
+**Example: Third-Party MCP Server with Environment Variables**
+
+For third-party MCP servers (like Ragie, custom knowledge bases, etc.), use environment variables to securely provide API credentials:
+
+```yaml
+agent:
+  id: 'support-bot'
+  name: 'Support Assistant'
+
+  system_prompt: |
+    You help users by searching the knowledge base.
+    Always use the search_knowledge tool before answering.
+
+  model:
+    anthropic:
+      name: 'claude-sonnet-4-5-20250929'
+
+      mcp_servers:
+        # Sniff's Linear integration (no token needed)
+        - type: url
+          url: 'https://api.sniff.to/mcp/linear'
+          name: 'Linear Integration'
+
+        # Third-party knowledge base (requires API key)
+        - type: url
+          url: '${RAGIE_MCP_URL:-https://api.ragie.ai/v1/mcp}'
+          name: 'Knowledge Base'
+          authorization_token: '${RAGIE_API_KEY}'
+```
+
+Then set the environment variables:
+
+```bash
+# .env file (DO NOT commit to version control!)
+RAGIE_API_KEY=your_secret_api_key_here
+RAGIE_MCP_URL=https://api.ragie.ai/v1/mcp  # Optional, uses default if not set
 ```
 
 ---

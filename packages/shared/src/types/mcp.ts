@@ -7,6 +7,7 @@ export type MCPServerConfig = {
   type: 'url';
   url: string;
   name: string;
+  authorization_token?: string;
   tool_configuration?: {
     enabled?: boolean;
     allowed_tools?: string[];

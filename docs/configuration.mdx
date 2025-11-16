@@ -317,6 +317,86 @@ mcp_servers:
 
 Omit `tool_configuration` to allow all tools from that MCP server.
 
+## Environment Variables
+
+You can use environment variables in your configuration to keep secrets out of version control and enable different values per environment.
+
+### Syntax
+
+Use `${VAR_NAME}` to reference environment variables:
+
+```yaml
+# Required variable (error if not set)
+authorization_token: ${API_KEY}
+
+# Optional variable with default value
+url: ${MCP_URL:-https://api.example.com/mcp}
+name: ${AGENT_NAME:-Default Agent}
+```
+
+**Rules**:
+
+- Variable names must be UPPERCASE with underscores: `A-Z`, `0-9`, `_`
+- Use `${VAR_NAME}` for required variables (deployment fails if not set)
+- Use `${VAR_NAME:-default}` for optional variables with fallback values
+- Interpolation happens before validation, so values must match expected types
+
+### Third-Party MCP Servers
+
+The most common use case is providing API keys for third-party MCP servers:
+
+```yaml
+agent:
+  model:
+    anthropic:
+      mcp_servers:
+        # Sniff's Linear integration (no token needed)
+        - type: url
+          url: https://api.sniff.to/mcp/linear
+          name: 'Linear Integration'
+
+        # Third-party knowledge base (requires API key)
+        - type: url
+          url: ${KNOWLEDGE_BASE_URL:-https://api.ragie.ai/v1/mcp}
+          name: 'Knowledge Base'
+          authorization_token: ${RAGIE_API_KEY}
+```
+
+<Warning>
+  **Never commit secrets to version control.** Always use environment variables for API keys,
+  tokens, and other sensitive data.
+</Warning>
+
+### Setting Environment Variables
+
+**Local development** - create a `.env` file:
+
+```bash
+# .env
+RAGIE_API_KEY=your_secret_key_here
+KNOWLEDGE_BASE_URL=https://api.ragie.ai/v1/mcp
+```
+
+Then deploy:
+
+```bash
+# Set env vars before running
+export $(cat .env | xargs)
+sniff deploy
+```
+
+**CI/CD (GitHub Actions)**:
+
+```yaml
+- name: Deploy agent
+  env:
+    RAGIE_API_KEY: ${{ secrets.RAGIE_API_KEY }}
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  run: npx @sniff-dev/cli deploy
+```
+
+**Production** - use your platform's secrets management (AWS Secrets Manager, Vercel env vars, etc.)
+
 ## Complete Examples
 
 ### Minimal Configuration

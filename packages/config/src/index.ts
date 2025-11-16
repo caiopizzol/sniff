@@ -58,6 +58,7 @@ const MCPServerSchema = z.object({
   type: z.literal('url'),
   url: z.string().url(),
   name: z.string().min(1).max(100),
+  authorization_token: z.string().optional(),
   tool_configuration: z
     .object({
       enabled: z.boolean().optional(),
@@ -238,12 +239,60 @@ export const ConfigSchema = z
 export type Config = z.infer<typeof ConfigSchema>;
 
 /**
+ * Interpolate environment variables in YAML content
+ * Supports syntax: ${VAR_NAME} and ${VAR_NAME:-default_value}
+ *
+ * @param yamlContent - Raw YAML string with potential env var references
+ * @returns YAML string with env vars interpolated
+ * @throws Error if a required env var (no default) is not set
+ *
+ * @example
+ * // With env var set: RAGIE_API_KEY=secret123
+ * interpolateEnvVars('token: ${RAGIE_API_KEY}')
+ * // Returns: 'token: secret123'
+ *
+ * @example
+ * // With default value when env var not set
+ * interpolateEnvVars('url: ${API_URL:-https://default.com}')
+ * // Returns: 'url: https://default.com'
+ */
+export function interpolateEnvVars(yamlContent: string): string {
+  // Regex matches: ${VAR_NAME} or ${VAR_NAME:-default_value}
+  // Capturing groups:
+  //   1: VAR_NAME
+  //   2: Full default part (:-default) - optional
+  //   3: default_value (without :-) - optional
+  const regex = /\$\{([A-Z_][A-Z0-9_]*)(:-([^}]*))?\}/g;
+
+  return yamlContent.replace(regex, (_match, varName, hasDefault, defaultValue) => {
+    const envValue = process.env[varName];
+
+    // If env var is set, use it (even if empty string)
+    if (envValue !== undefined) {
+      return envValue;
+    }
+
+    // If env var not set but has default, use default
+    if (hasDefault !== undefined) {
+      return defaultValue || '';
+    }
+
+    // Required env var missing - throw error
+    throw new Error(
+      `Environment variable ${varName} is not set and has no default value. ` +
+        `Use \${${varName}:-default} to provide a default, or set ${varName} in your environment.`,
+    );
+  });
+}
+
+/**
  * Load and validate config from a file path
  */
 export function loadConfig(path = 'config.yml'): Config {
   try {
     const file = readFileSync(path, 'utf-8');
-    const parsed = parse(file);
+    const interpolated = interpolateEnvVars(file);
+    const parsed = parse(interpolated);
     return ConfigSchema.parse(parsed);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -267,9 +316,10 @@ export function validateConfig(config: unknown): z.infer<typeof ConfigSchema> {
 }
 
 /**
- * Parse YAML string and validate
+ * Parse YAML string and validate (with environment variable interpolation)
  */
 export function parseAndValidateConfig(yamlContent: string): z.infer<typeof ConfigSchema> {
-  const parsed = parse(yamlContent);
+  const interpolated = interpolateEnvVars(yamlContent);
+  const parsed = parse(interpolated);
   return validateConfig(parsed);
 }
