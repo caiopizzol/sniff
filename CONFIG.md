@@ -339,12 +339,12 @@ agent:
 - `name` (required if type is `"tool"`): Name of the specific tool to use
 - `disable_parallel_tool_use` (optional): Disable parallel tool execution
 
-#### `agent.model.anthropic.tools` (required)
+#### `agent.model.anthropic.tools` (optional)
 
 **Type**: `array`
 **Default**: `[]`
 
-List of tools the agent can actively invoke. Currently supports server-side tools executed by Anthropic's infrastructure.
+List of tools the agent can actively invoke. Currently supports server-side tools executed by Anthropic's infrastructure. Can be omitted if no tools are needed (defaults to empty array).
 
 **Web Search Tool** (`web_search_20250305`)
 
