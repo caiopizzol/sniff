@@ -7,6 +7,30 @@ import { Config } from '../lib/config.js';
 import { api } from '../lib/api.js';
 import { parseAndValidateConfig } from '@sniff-dev/config';
 
+/**
+ * Extract required provider connections from MCP server configuration
+ * Sniff-hosted MCP servers follow the pattern: {any-domain}/mcp/{provider}
+ * where provider is one of: linear, github, slack, notion
+ */
+function extractRequiredProviders(config: any): string[] {
+  const mcpServers = config.agent?.model?.anthropic?.mcp_servers || [];
+  const validProviders = ['linear', 'github'];
+  const providers = new Set<string>();
+  const pattern = /\/mcp\/([^/?#]+)/;
+
+  for (const server of mcpServers) {
+    const match = server.url?.match(pattern);
+    if (match) {
+      const provider = match[1];
+      if (validProviders.includes(provider)) {
+        providers.add(provider);
+      }
+    }
+  }
+
+  return Array.from(providers);
+}
+
 export const deploy = new Command('deploy')
   .description('Deploy agent to Linear')
   .option('-c, --config <path>', 'Config file path', 'config.yml')
@@ -46,25 +70,36 @@ export const deploy = new Command('deploy')
       // Check required connections
       spinner.text = 'Checking connections...';
       const connections = await api.get<any[]>('/connections', token);
-      const linearConnection = connections.find((c) => c.provider === 'linear');
-      const anthropicConnection = connections.find((c) => c.provider === 'anthropic');
 
-      if (!linearConnection || !anthropicConnection) {
+      const baseRequiredProviders = ['linear', 'anthropic'];
+      const mcpRequiredProviders = extractRequiredProviders(validConfig);
+      const allRequiredProviders = [
+        ...new Set([...baseRequiredProviders, ...mcpRequiredProviders]),
+      ];
+      const missingProviders = allRequiredProviders.filter(
+        (provider) => !connections.some((c) => c.provider === provider),
+      );
+
+      if (missingProviders.length > 0) {
         spinner.fail('Missing required connections');
-        console.error(chalk.red('\n✗ Both Linear and Anthropic connections are required.'));
+        console.error(chalk.red('\n✗ The following connections are required:'));
 
-        if (!linearConnection) {
-          console.log(chalk.gray('  • Run `sniff connect linear` to connect Linear workspace'));
-        }
-        if (!anthropicConnection) {
-          console.log(chalk.gray('  • Run `sniff connect anthropic` to connect Anthropic API key'));
+        for (const provider of missingProviders) {
+          const reason = baseRequiredProviders.includes(provider)
+            ? '(required for platform)'
+            : '(required by MCP server in config)';
+          console.log(
+            chalk.gray('  • Run'),
+            chalk.cyan(`sniff connect ${provider}`),
+            chalk.gray(reason),
+          );
         }
 
         process.exit(1);
       }
 
-      // Deploy agent
       spinner.text = 'Deploying agent...';
+      const linearConnection = connections.find((c) => c.provider === 'linear')!;
       const result = await api.post<{ agentId: string; updated?: boolean }>(
         '/agents',
         {
