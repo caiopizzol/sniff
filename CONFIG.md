@@ -180,11 +180,11 @@ agent:
       name: 'claude-sonnet-4-5-20250929'
 ```
 
-##### `agent.model.anthropic.temperature` (optional)
+##### `agent.model.anthropic.temperature` (required)
 
 **Type**: `number`
 **Range**: `0.0 - 1.0`
-**Default**: `1.0` (matches Anthropic's default)
+**Default**: `1`
 
 Controls randomness in responses. Lower = more deterministic, Higher = more creative.
 
@@ -195,11 +195,11 @@ agent:
       temperature: 0.7
 ```
 
-##### `agent.model.anthropic.max_tokens` (optional)
+##### `agent.model.anthropic.max_tokens` (required)
 
 **Type**: `integer`
 **Range**: `1 - 8192`
-**Default**: `4096` (matches Anthropic's default)
+**Default**: `4096`
 
 Maximum tokens for the response.
 
@@ -339,12 +339,12 @@ agent:
 - `name` (required if type is `"tool"`): Name of the specific tool to use
 - `disable_parallel_tool_use` (optional): Disable parallel tool execution
 
-#### `agent.model.tools` (optional)
+#### `agent.model.anthropic.tools` (optional)
 
 **Type**: `array`
 **Default**: `[]`
 
-List of tools the agent can actively invoke. Currently supports server-side tools executed by Anthropic's infrastructure.
+List of tools the agent can actively invoke. Currently supports server-side tools executed by Anthropic's infrastructure. Can be omitted if no tools are needed (defaults to empty array).
 
 **Web Search Tool** (`web_search_20250305`)
 

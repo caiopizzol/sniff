@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "@anolilab/semantic-release-pnpm": "^2.0.5",
-    "@anthropic-ai/sdk": "^0.68.0",
+    "@anthropic-ai/sdk": "^0.69.0",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/commit-analyzer": "^13.0.1",
     "@semantic-release/git": "^10.0.1",

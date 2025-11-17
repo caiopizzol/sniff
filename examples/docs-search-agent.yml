@@ -41,9 +41,6 @@ agent:
       name: 'claude-sonnet-4-5-20250929'
       temperature: 0.5
       max_tokens: 3000
-      tool_choice:
-        type: 'auto' # Let Claude decide when to use tools
-
       tools:
         # Find relevant documentation pages
         - type: web_search_20250305

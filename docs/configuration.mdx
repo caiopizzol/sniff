@@ -268,13 +268,13 @@ agent:
           url: https://api.sniff.to/mcp/linear
           name: 'Linear Integration'
           tool_configuration:
-            allowed_tools: ['searchIssues', 'getIssue']
+            allowed_tools: ['list_issues', 'get_issue']
 ```
 
 **Available tools**:
 
-- `searchIssues` - Search workspace issues
-- `getIssue` - Get issue details by ID
+- `list_issues` - List and search workspace issues
+- `get_issue` - Get issue details by ID
 
 **Setup**: Run `sniff connect linear` (completed during quickstart)
 
@@ -498,7 +498,7 @@ agent:
           url: https://api.sniff.to/mcp/linear
           name: 'Linear Integration'
           tool_configuration:
-            allowed_tools: ['searchIssues']
+            allowed_tools: ['list_issues']
 ```
 
 ## Updating Configuration

@@ -57,4 +57,4 @@ agent:
           url: https://api.sniff.to/mcp/linear
           name: 'Linear Integration'
           tool_configuration:
-            allowed_tools: ['searchIssues', 'getIssue']
+            allowed_tools: ['list_issues', 'get_issue']

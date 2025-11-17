@@ -1,349 +1,349 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sniff.dev/schemas/config.schema.json",
   "title": "Sniff Agent Configuration",
   "description": "Schema for Sniff agent configuration file (config.yml) version 1.0",
-  "$ref": "#/definitions/SniffAgentConfiguration",
-  "definitions": {
-    "SniffAgentConfiguration": {
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "agent": {
       "type": "object",
       "properties": {
-        "version": {
+        "id": {
           "type": "string",
-          "const": "1.0"
+          "minLength": 1,
+          "maxLength": 50,
+          "pattern": "^[a-z0-9-]+$"
         },
-        "agent": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "system_prompt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 10000
+        },
+        "model": {
           "type": "object",
           "properties": {
-            "id": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 50,
-              "pattern": "^[a-z0-9-]+$"
-            },
-            "name": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 100
-            },
-            "description": {
-              "type": "string",
-              "maxLength": 500
-            },
-            "system_prompt": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 10000
-            },
-            "model": {
+            "anthropic": {
               "type": "object",
               "properties": {
-                "anthropic": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    "temperature": {
-                      "type": "number",
-                      "minimum": 0,
-                      "maximum": 1,
-                      "default": 1
-                    },
-                    "max_tokens": {
-                      "type": "integer",
-                      "minimum": 1,
-                      "maximum": 8192,
-                      "default": 4096
-                    },
-                    "top_p": {
-                      "type": "number",
-                      "minimum": 0,
-                      "maximum": 1
-                    },
-                    "top_k": {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    "stop_sequences": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      },
-                      "maxItems": 10
-                    },
-                    "thinking": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "type": {
-                              "type": "string",
-                              "const": "enabled"
-                            },
-                            "budget_tokens": {
-                              "type": "integer",
-                              "minimum": 1024
-                            }
-                          },
-                          "required": ["type", "budget_tokens"],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "type": {
-                              "type": "string",
-                              "const": "disabled"
-                            }
-                          },
-                          "required": ["type"],
-                          "additionalProperties": false
-                        }
-                      ]
-                    },
-                    "metadata": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "temperature": {
+                  "default": 1,
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "max_tokens": {
+                  "default": 4096,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 8192
+                },
+                "top_p": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "top_k": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "stop_sequences": {
+                  "maxItems": 10,
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "thinking": {
+                  "anyOf": [
+                    {
                       "type": "object",
                       "properties": {
-                        "user_id": {
+                        "type": {
                           "type": "string",
-                          "maxLength": 256
+                          "const": "enabled"
+                        },
+                        "budget_tokens": {
+                          "type": "integer",
+                          "minimum": 1024,
+                          "maximum": 9007199254740991
                         }
                       },
+                      "required": ["type", "budget_tokens"],
                       "additionalProperties": false
                     },
-                    "tool_choice": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "type": {
-                              "type": "string",
-                              "const": "auto"
-                            },
-                            "disable_parallel_tool_use": {
-                              "type": "boolean"
-                            }
-                          },
-                          "required": ["type"],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "type": {
-                              "type": "string",
-                              "const": "any"
-                            },
-                            "disable_parallel_tool_use": {
-                              "type": "boolean"
-                            }
-                          },
-                          "required": ["type"],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "type": {
-                              "type": "string",
-                              "const": "tool"
-                            },
-                            "name": {
-                              "type": "string"
-                            },
-                            "disable_parallel_tool_use": {
-                              "type": "boolean"
-                            }
-                          },
-                          "required": ["type", "name"],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "type": {
-                              "type": "string",
-                              "const": "none"
-                            }
-                          },
-                          "required": ["type"],
-                          "additionalProperties": false
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "disabled"
                         }
-                      ]
-                    },
-                    "tools": {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "object",
-                            "properties": {
-                              "type": {
-                                "type": "string",
-                                "const": "web_search_20250305"
-                              },
-                              "name": {
-                                "type": "string",
-                                "const": "web_search"
-                              },
-                              "max_uses": {
-                                "type": "integer",
-                                "minimum": 1
-                              },
-                              "allowed_domains": {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                }
-                              },
-                              "blocked_domains": {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                }
-                              },
-                              "user_location": {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "const": "approximate"
-                                  },
-                                  "city": {
-                                    "type": "string"
-                                  },
-                                  "region": {
-                                    "type": "string"
-                                  },
-                                  "country": {
-                                    "type": "string"
-                                  },
-                                  "timezone": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": ["type"],
-                                "additionalProperties": false
-                              }
-                            },
-                            "required": ["type", "name"],
-                            "additionalProperties": false
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "type": {
-                                "type": "string",
-                                "const": "web_fetch_20250910"
-                              },
-                              "name": {
-                                "type": "string",
-                                "const": "web_fetch"
-                              },
-                              "max_uses": {
-                                "type": "integer",
-                                "minimum": 1
-                              },
-                              "allowed_domains": {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                }
-                              },
-                              "blocked_domains": {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                }
-                              },
-                              "citations": {
-                                "type": "object",
-                                "properties": {
-                                  "enabled": {
-                                    "type": "boolean"
-                                  }
-                                },
-                                "required": ["enabled"],
-                                "additionalProperties": false
-                              },
-                              "max_content_tokens": {
-                                "type": "integer",
-                                "minimum": 1
-                              }
-                            },
-                            "required": ["type", "name"],
-                            "additionalProperties": false
-                          }
-                        ]
                       },
-                      "default": []
+                      "required": ["type"],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "metadata": {
+                  "type": "object",
+                  "properties": {
+                    "user_id": {
+                      "type": "string",
+                      "maxLength": 256
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "tool_choice": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "auto"
+                        },
+                        "disable_parallel_tool_use": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["type"],
+                      "additionalProperties": false
                     },
-                    "mcp_servers": {
-                      "type": "array",
-                      "items": {
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "any"
+                        },
+                        "disable_parallel_tool_use": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["type"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "tool"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "disable_parallel_tool_use": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["type", "name"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "none"
+                        }
+                      },
+                      "required": ["type"],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "tools": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
                         "type": "object",
                         "properties": {
                           "type": {
                             "type": "string",
-                            "const": "url"
-                          },
-                          "url": {
-                            "type": "string",
-                            "format": "uri"
+                            "const": "web_search_20250305"
                           },
                           "name": {
                             "type": "string",
-                            "minLength": 1,
-                            "maxLength": 100
+                            "const": "web_search"
                           },
-                          "authorization_token": {
-                            "type": "string"
+                          "max_uses": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
                           },
-                          "tool_configuration": {
+                          "allowed_domains": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "blocked_domains": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "user_location": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "const": "approximate"
+                              },
+                              "city": {
+                                "type": "string"
+                              },
+                              "region": {
+                                "type": "string"
+                              },
+                              "country": {
+                                "type": "string"
+                              },
+                              "timezone": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["type"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["type", "name"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "web_fetch_20250910"
+                          },
+                          "name": {
+                            "type": "string",
+                            "const": "web_fetch"
+                          },
+                          "max_uses": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "allowed_domains": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "blocked_domains": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "citations": {
                             "type": "object",
                             "properties": {
                               "enabled": {
                                 "type": "boolean"
-                              },
-                              "allowed_tools": {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                }
-                              },
-                              "disabled_tools": {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                }
                               }
                             },
+                            "required": ["enabled"],
                             "additionalProperties": false
+                          },
+                          "max_content_tokens": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
                           }
                         },
-                        "required": ["type", "url", "name"],
+                        "required": ["type", "name"],
                         "additionalProperties": false
                       }
-                    }
-                  },
-                  "required": ["name"],
-                  "additionalProperties": false
+                    ]
+                  }
+                },
+                "mcp_servers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "url"
+                      },
+                      "url": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "authorization_token": {
+                        "type": "string"
+                      },
+                      "tool_configuration": {
+                        "type": "object",
+                        "properties": {
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "allowed_tools": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "disabled_tools": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["type", "url", "name"],
+                    "additionalProperties": false
+                  }
                 }
               },
-              "required": ["anthropic"],
+              "required": ["name", "temperature", "max_tokens", "tools"],
               "additionalProperties": false
             }
           },
-          "required": ["id", "name", "system_prompt", "model"],
+          "required": ["anthropic"],
           "additionalProperties": false
         }
       },
-      "required": ["version", "agent"],
+      "required": ["id", "name", "system_prompt", "model"],
       "additionalProperties": false
     }
   },
+  "required": ["version", "agent"],
+  "additionalProperties": false,
   "examples": [
     {
       "version": "1.0",

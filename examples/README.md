@@ -78,12 +78,11 @@ Analyzes issues for effort estimation and dependency detection.
 
 **File:** `technical-support-agent.yml`
 
-Answers questions using docs, GitHub code, and past tickets.
+Answers questions using documentation and past support tickets.
 
 **Features:**
 
 - Web search + fetch for documentation
-- **GitHub MCP** for code examples
 - **Linear MCP** for past tickets
 - Combines multiple sources in one answer
 
@@ -126,7 +125,6 @@ Answers questions using docs, GitHub code, and past tickets.
 **MCP Servers:**
 
 - `https://api.sniff.to/mcp/linear`: Access Linear issues
-- `https://api.sniff.to/mcp/github`: Access GitHub repos and issues
 
 ## Deploying Multiple Agents
 

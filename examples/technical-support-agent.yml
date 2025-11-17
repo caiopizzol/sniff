@@ -1,12 +1,12 @@
 # Technical Support Agent
-# Answers technical questions by combining docs, GitHub code, and past Linear tickets
+# Answers technical questions by combining documentation and past Linear tickets
 
 version: '1.0'
 
 agent:
   id: 'technical-support-agent'
   name: 'Support Context Master'
-  description: 'Answers technical questions using docs, GitHub code, and past tickets'
+  description: 'Answers technical questions using documentation and past support tickets'
 
   system_prompt: |
     You are a Support Context Master that provides comprehensive answers by combining multiple sources.
@@ -14,12 +14,10 @@ agent:
     When answering technical questions, use:
 
     1. **Web search + fetch** for official documentation
-    2. **GitHub MCP** for code examples and implementation details
-    3. **Linear MCP** for past similar support tickets
+    2. **Linear MCP** for past similar support tickets
 
     Workflow:
     - Search docs for official explanations
-    - Search GitHub for code examples or related issues
     - Search Linear for similar past questions
     - Synthesize a complete answer from all sources
 
@@ -29,9 +27,6 @@ agent:
 
     **From Documentation:**
     [Relevant info from official docs with URL]
-
-    **From Code Examples:**
-    [Actual code or implementation from GitHub PR with link]
 
     **Past Similar Tickets:**
     [How this was resolved before in Linear with link]
@@ -61,18 +56,11 @@ agent:
           citations:
             enabled: true
 
-      # MCP servers for GitHub and Linear context
+      # MCP servers for Linear context
       mcp_servers:
-        # GitHub for code examples
-        - type: url
-          url: https://api.sniff.to/mcp/github
-          name: 'GitHub Integration'
-          tool_configuration:
-            allowed_tools: ['search_issues', 'get_issue']
-
         # Linear for past support tickets
         - type: url
           url: https://api.sniff.to/mcp/linear
           name: 'Linear Integration'
           tool_configuration:
-            allowed_tools: ['searchIssues', 'getIssue']
+            allowed_tools: ['list_issues', 'get_issue']

@@ -6,7 +6,7 @@ description: Complete technical specification of all configuration fields
 <Note>
   **Auto-generated from JSON Schema**
 
-Last updated: 2025-11-14
+Last updated: 2025-11-17
 
 This page provides the complete technical specification of all configuration fields. For explanations and best practices, see the [Configuration](/configuration) guide.
 
@@ -37,19 +37,19 @@ This page provides the complete technical specification of all configuration fie
 
 ### agent.model.anthropic
 
-| Field            | Type      | Required | Constraints   | Default |
-| ---------------- | --------- | -------- | ------------- | ------- |
-| `name`           | `string`  | ✓        | Min length: 1 | -       |
-| `temperature`    | `number`  |          | 0 - 1         | `1`     |
-| `max_tokens`     | `integer` |          | 1 - 8192      | `4096`  |
-| `top_p`          | `number`  |          | 0 - 1         | -       |
-| `top_k`          | `integer` |          | ≥ 0           | -       |
-| `stop_sequences` | string[]  |          | Max 10 items  | -       |
-| `thinking`       | `object`  |          | -             | -       |
-| `metadata`       | `object`  |          | -             | -       |
-| `tool_choice`    | `object`  |          | -             | -       |
-| `tools`          | `array`   |          | -             | `[]`    |
-| `mcp_servers`    | object[]  |          | -             | -       |
+| Field            | Type      | Required | Constraints          | Default |
+| ---------------- | --------- | -------- | -------------------- | ------- |
+| `name`           | `string`  | ✓        | Min length: 1        | -       |
+| `temperature`    | `number`  | ✓        | 0 - 1                | `1`     |
+| `max_tokens`     | `integer` | ✓        | 1 - 8192             | `4096`  |
+| `top_p`          | `number`  |          | 0 - 1                | -       |
+| `top_k`          | `integer` |          | 0 - 9007199254740991 | -       |
+| `stop_sequences` | string[]  |          | Max 10 items         | -       |
+| `thinking`       | `object`  |          | -                    | -       |
+| `metadata`       | `object`  |          | -                    | -       |
+| `tool_choice`    | `object`  |          | -                    | -       |
+| `tools`          | `array`   | ✓        | -                    | `[]`    |
+| `mcp_servers`    | object[]  |          | -                    | -       |
 
 ### agent.model.anthropic.thinking
 
@@ -57,10 +57,10 @@ Union type with 2 variants:
 
 **`enabled` variant:**
 
-| Field           | Type        | Required | Constraints |
-| --------------- | ----------- | -------- | ----------- |
-| `type`          | `"enabled"` | ✓        | -           |
-| `budget_tokens` | `integer`   | ✓        | ≥ 1024      |
+| Field           | Type        | Required | Constraints             |
+| --------------- | ----------- | -------- | ----------------------- |
+| `type`          | `"enabled"` | ✓        | -                       |
+| `budget_tokens` | `integer`   | ✓        | 1024 - 9007199254740991 |
 
 **`disabled` variant:**
 
@@ -112,14 +112,14 @@ Array items must be one of:
 
 #### web_search_20250305
 
-| Field             | Type                    | Required | Constraints |
-| ----------------- | ----------------------- | -------- | ----------- |
-| `type`            | `"web_search_20250305"` | ✓        | -           |
-| `name`            | `"web_search"`          | ✓        | -           |
-| `max_uses`        | `integer`               |          | ≥ 1         |
-| `allowed_domains` | string[]                |          | -           |
-| `blocked_domains` | string[]                |          | -           |
-| `user_location`   | `object`                |          | -           |
+| Field             | Type                    | Required | Constraints          |
+| ----------------- | ----------------------- | -------- | -------------------- |
+| `type`            | `"web_search_20250305"` | ✓        | -                    |
+| `name`            | `"web_search"`          | ✓        | -                    |
+| `max_uses`        | `integer`               |          | 1 - 9007199254740991 |
+| `allowed_domains` | string[]                |          | -                    |
+| `blocked_domains` | string[]                |          | -                    |
+| `user_location`   | `object`                |          | -                    |
 
 ### agent.model.anthropic.tools[].user_location
 
@@ -133,15 +133,15 @@ Array items must be one of:
 
 #### web_fetch_20250910
 
-| Field                | Type                   | Required | Constraints |
-| -------------------- | ---------------------- | -------- | ----------- |
-| `type`               | `"web_fetch_20250910"` | ✓        | -           |
-| `name`               | `"web_fetch"`          | ✓        | -           |
-| `max_uses`           | `integer`              |          | ≥ 1         |
-| `allowed_domains`    | string[]               |          | -           |
-| `blocked_domains`    | string[]               |          | -           |
-| `citations`          | `object`               |          | -           |
-| `max_content_tokens` | `integer`              |          | ≥ 1         |
+| Field                | Type                   | Required | Constraints          |
+| -------------------- | ---------------------- | -------- | -------------------- |
+| `type`               | `"web_fetch_20250910"` | ✓        | -                    |
+| `name`               | `"web_fetch"`          | ✓        | -                    |
+| `max_uses`           | `integer`              |          | 1 - 9007199254740991 |
+| `allowed_domains`    | string[]               |          | -                    |
+| `blocked_domains`    | string[]               |          | -                    |
+| `citations`          | `object`               |          | -                    |
+| `max_content_tokens` | `integer`              |          | 1 - 9007199254740991 |
 
 ### agent.model.anthropic.tools[].citations
 
@@ -151,12 +151,13 @@ Array items must be one of:
 
 ### agent.model.anthropic.mcp_servers[]
 
-| Field                | Type     | Required | Constraints   |
-| -------------------- | -------- | -------- | ------------- |
-| `type`               | `"url"`  | ✓        | -             |
-| `url`                | `string` | ✓        | Format: uri   |
-| `name`               | `string` | ✓        | Length: 1-100 |
-| `tool_configuration` | `object` |          | -             |
+| Field                 | Type     | Required | Constraints   |
+| --------------------- | -------- | -------- | ------------- |
+| `type`                | `"url"`  | ✓        | -             |
+| `url`                 | `string` | ✓        | Format: uri   |
+| `name`                | `string` | ✓        | Length: 1-100 |
+| `authorization_token` | `string` |          | -             |
+| `tool_configuration`  | `object` |          | -             |
 
 ### agent.model.anthropic.mcp_servers[].tool_configuration
 

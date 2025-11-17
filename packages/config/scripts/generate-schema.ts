@@ -7,17 +7,14 @@
 import { writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import * as z from 'zod';
 import { ConfigSchema } from '../src/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Convert Zod schema to JSON Schema
-const jsonSchema = zodToJsonSchema(ConfigSchema, {
-  name: 'SniffAgentConfiguration',
-  $refStrategy: 'none', // Inline all definitions for simplicity
-});
+// Convert Zod schema to JSON Schema using native Zod v4 function
+const jsonSchema = z.toJSONSchema(ConfigSchema);
 
 // Add custom metadata fields
 const schema = {

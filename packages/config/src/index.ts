@@ -298,7 +298,7 @@ export function loadConfig(path = 'config.yml'): Config {
     if (error instanceof z.ZodError) {
       console.error('❌ Invalid configuration in', path);
       console.error('\nValidation errors:');
-      error.errors.forEach((err) => {
+      error.issues.forEach((err) => {
         console.error(`  ${err.path.join('.')}: ${err.message}`);
       });
       console.error('\nCheck your config.yml against CONFIG_SPEC_V1.md');
