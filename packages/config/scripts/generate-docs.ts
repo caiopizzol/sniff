@@ -328,23 +328,22 @@ class SchemaParser {
     this.lines.push('</Note>');
     this.lines.push('');
 
-    // Get the root definition
-    const rootDef = this.schema.definitions?.SniffAgentConfiguration;
-    if (!rootDef || !rootDef.properties) {
-      throw new Error('Could not find SniffAgentConfiguration in schema definitions');
+    // Get the root schema properties
+    if (!this.schema.properties) {
+      throw new Error('Could not find properties in root schema');
     }
 
     // Document root level
     this.lines.push('### Root Configuration');
     this.lines.push('');
-    const rootProps = this.parseProperties(rootDef.properties, rootDef.required || []);
+    const rootProps = this.parseProperties(this.schema.properties, this.schema.required || []);
     this.lines.push(this.generateTable(rootProps, false, false));
     this.lines.push('');
 
     // Document agent object
-    const agentSchema = rootDef.properties.agent;
+    const agentSchema = this.schema.properties.agent;
     if (!agentSchema) {
-      throw new Error('Could not find agent schema in root definition');
+      throw new Error('Could not find agent schema in root properties');
     }
     this.documentObject('agent', agentSchema);
 
