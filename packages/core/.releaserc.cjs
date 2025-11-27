@@ -39,7 +39,7 @@ if (!isPrerelease) {
   config.plugins.push([
     '@semantic-release/git',
     {
-      assets: ['package.json', '../../config.schema.json', '../../docs/schema-reference.mdx'],
+      assets: ['package.json'],
       message:
         'chore(release): @sniff-dev/core ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
     },
