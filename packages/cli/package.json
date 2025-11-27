@@ -1,6 +1,6 @@
 {
   "name": "@sniff-dev/cli",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "description": "Self-hosted AI agent framework for Linear, GitHub, and Slack",
   "keywords": [
     "linear",
