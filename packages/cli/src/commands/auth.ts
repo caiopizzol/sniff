@@ -2,68 +2,69 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
+import { exec } from 'child_process';
 import { authenticateLinear } from '@sniff-dev/core';
+
+function openBrowser(url: string): void {
+  const cmd =
+    process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+  exec(`${cmd} "${url}"`);
+}
 
 const DEFAULT_SERVER_URL = 'https://api.sniff.to';
 
-function getDefaultRedirectUri(): string {
-  const serverUrl = process.env.SNIFF_SERVER_URL || DEFAULT_SERVER_URL;
-  return `${serverUrl.replace(/\/$/, '')}/auth/linear/callback`;
+function getServerUrl(): string {
+  return process.env.SNIFF_SERVER_URL || DEFAULT_SERVER_URL;
+}
+
+function isLocalhost(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
 }
 
 export const auth = new Command('auth').description('Authenticate with Linear').addCommand(
-  new Command('linear')
-    .description('Authenticate with Linear via OAuth2')
-    .option('--client-id <id>', 'Linear OAuth app client ID (or LINEAR_CLIENT_ID env)')
-    .option(
-      '--client-secret <secret>',
-      'Linear OAuth app client secret (or LINEAR_CLIENT_SECRET env)',
-    )
-    .option('--redirect-uri <uri>', 'OAuth redirect URI (or uses SNIFF_SERVER_URL)')
-    .action(async (options: { clientId?: string; clientSecret?: string; redirectUri?: string }) => {
-      const clientId = options.clientId || process.env.LINEAR_CLIENT_ID;
-      const clientSecret = options.clientSecret || process.env.LINEAR_CLIENT_SECRET;
-      const redirectUri = options.redirectUri || getDefaultRedirectUri();
+  new Command('linear').description('Authenticate with Linear via OAuth2').action(async () => {
+    const serverUrl = getServerUrl();
+    const useLocal = isLocalhost(serverUrl);
+
+    if (useLocal) {
+      // Local flow: start a local server to handle OAuth
+      const clientId = process.env.LINEAR_CLIENT_ID;
+      const clientSecret = process.env.LINEAR_CLIENT_SECRET;
 
       if (!clientId || !clientSecret) {
-        console.error(chalk.red('Missing client credentials.'));
-        console.error(chalk.gray('Set LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET in .env'));
-        console.error(chalk.gray('Or pass --client-id and --client-secret'));
+        console.error(chalk.red('Set LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET'));
         process.exit(1);
       }
 
-      console.log(chalk.bold('\nLinear OAuth2 Authentication\n'));
-      console.log(chalk.gray('This will open a browser window to authorize with Linear.'));
-      console.log(chalk.gray('Your tokens will be stored in the database.\n'));
-
-      const spinner = ora('Starting auth server...').start();
+      const spinner = ora('Waiting for authorization...').start();
 
       try {
-        spinner.text = 'Waiting for authorization...';
-        spinner.info();
-        console.log(chalk.gray(`Callback URL: ${redirectUri}\n`));
-
         const result = await authenticateLinear({
           clientId,
           clientSecret,
-          redirectUri,
+          redirectUri: `${serverUrl}/auth/linear/callback`,
         });
 
         if (result.success) {
-          console.log(chalk.green('\n✓ Successfully authenticated with Linear!'));
-          console.log(
-            chalk.gray(
-              '\nYou can now start the Sniff server without setting LINEAR_ACCESS_TOKEN.\n',
-            ),
-          );
+          spinner.succeed('Authenticated with Linear');
         } else {
-          console.error(chalk.red(`\n✗ Authentication failed: ${result.error}\n`));
+          spinner.fail(result.error || 'Authentication failed');
           process.exit(1);
         }
       } catch (error) {
-        spinner.fail('Authentication failed');
-        console.error(chalk.red((error as Error).message));
+        spinner.fail((error as Error).message);
         process.exit(1);
       }
-    }),
+    } else {
+      // Cloud flow: direct user to the server's auth endpoint
+      const authUrl = `${serverUrl}/auth/linear`;
+      console.log(chalk.cyan(authUrl) + '\n');
+      openBrowser(authUrl);
+    }
+  }),
 );
