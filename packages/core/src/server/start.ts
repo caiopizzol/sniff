@@ -17,16 +17,9 @@ export interface StartServerOptions {
 }
 
 /**
- * Get Linear access token from env var or storage
+ * Get Linear access token from storage (set via OAuth flow)
  */
 async function getLinearToken(): Promise<string | null> {
-  // First check environment variable
-  const envToken = process.env.LINEAR_ACCESS_TOKEN;
-  if (envToken) {
-    return envToken;
-  }
-
-  // Fall back to stored OAuth2 token
   const storage = createTokenStorage();
   try {
     const tokens = await storage.get();
@@ -61,6 +54,22 @@ export async function startServer(options: StartServerOptions = {}): Promise<voi
     console.log('No config found. Deploy agents with: sniff deploy --server <url>');
   }
 
+  // Determine port
+  const port = options.port ?? (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
+
+  // OAuth config (optional, for cloud auth flow)
+  const linearClientId = process.env.LINEAR_CLIENT_ID;
+  const linearClientSecret = process.env.LINEAR_CLIENT_SECRET;
+  const serverUrl = process.env.SNIFF_SERVER_URL || `http://localhost:${port}`;
+  const oauth =
+    linearClientId && linearClientSecret
+      ? {
+          clientId: linearClientId,
+          clientSecret: linearClientSecret,
+          redirectUri: `${serverUrl.replace(/\/$/, '')}/auth/linear/callback`,
+        }
+      : undefined;
+
   // Read credentials
   const linearToken = await getLinearToken();
   const linearWebhookSecret = process.env.LINEAR_WEBHOOK_SECRET;
@@ -69,10 +78,16 @@ export async function startServer(options: StartServerOptions = {}): Promise<voi
   // Only require credentials when there's a config with agents
   const hasAgents = config && config.agents.length > 0;
 
-  if (hasAgents && !linearToken) {
+  // If agents exist but no token, only error if OAuth isn't configured
+  // (with OAuth, users can authenticate after server starts)
+  if (hasAgents && !linearToken && !oauth) {
     throw new Error(
-      'No Linear access token found. Set LINEAR_ACCESS_TOKEN env var or run `sniff auth linear`.',
+      'No Linear access token found. Configure OAuth (LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET) or run `sniff auth linear`.',
     );
+  }
+
+  if (hasAgents && !linearToken && oauth) {
+    console.log('No Linear token yet. Authenticate at: ' + serverUrl + '/auth/linear');
   }
 
   if (hasAgents && !anthropicKey) {
@@ -89,7 +104,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<voi
     });
     console.log('Linear platform initialized');
   } else {
-    console.log('Linear platform not initialized (no token). Set LINEAR_ACCESS_TOKEN to enable.');
+    console.log('Linear platform not initialized (no token). Authenticate via OAuth to enable.');
   }
 
   // Initialize LLM client (if key available)
@@ -117,24 +132,8 @@ export async function startServer(options: StartServerOptions = {}): Promise<voi
       }))
     : [];
 
-  // Determine port
-  const port = options.port ?? (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
-
   // Get API key for remote deploy (optional)
   const apiKey = process.env.SNIFF_API_KEY;
-
-  // OAuth config (optional, for cloud auth flow)
-  const linearClientId = process.env.LINEAR_CLIENT_ID;
-  const linearClientSecret = process.env.LINEAR_CLIENT_SECRET;
-  const serverUrl = process.env.SNIFF_SERVER_URL || `http://localhost:${port}`;
-  const oauth =
-    linearClientId && linearClientSecret
-      ? {
-          clientId: linearClientId,
-          clientSecret: linearClientSecret,
-          redirectUri: `${serverUrl.replace(/\/$/, '')}/auth/linear/callback`,
-        }
-      : undefined;
 
   // Create and start server
   const serverConfig: SniffServerConfig = {
