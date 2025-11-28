@@ -44,6 +44,7 @@
   },
   "dependencies": {
     "@sniff-dev/config": "workspace:*",
+    "@sniff-dev/core": "workspace:*",
     "chalk": "^5.6.2",
     "commander": "^14.0.2",
     "ora": "^9.0.0"

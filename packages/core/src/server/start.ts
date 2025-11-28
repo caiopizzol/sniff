@@ -9,11 +9,38 @@ import { loadConfig } from '@sniff-dev/config';
 import { createSniffServer, type SniffServerConfig } from './index.js';
 import { LinearPlatform } from '../platforms/index.js';
 import { createAnthropicClient } from '../llm/anthropic.js';
+import { createTokenStorage } from '../storage/index.js';
 import type { AgentConfig } from '../agent/runner.js';
 
 export interface StartServerOptions {
   configPath?: string;
   port?: number;
+}
+
+/**
+ * Get Linear access token from env var or storage
+ */
+async function getLinearToken(): Promise<string> {
+  // First check environment variable
+  const envToken = process.env.LINEAR_ACCESS_TOKEN;
+  if (envToken) {
+    return envToken;
+  }
+
+  // Fall back to stored OAuth2 token
+  const storage = createTokenStorage();
+  try {
+    const tokens = await storage.get();
+    if (tokens?.accessToken) {
+      return tokens.accessToken;
+    }
+  } finally {
+    storage.close();
+  }
+
+  throw new Error(
+    'No Linear access token found. Set LINEAR_ACCESS_TOKEN env var or run `sniff auth linear`.',
+  );
 }
 
 /**
@@ -27,17 +54,13 @@ export async function startServer(options: StartServerOptions = {}): Promise<voi
   const config = loadConfig(configPath);
   console.log('Configuration loaded');
 
-  // Read credentials from environment variables
-  const linearToken = process.env.LINEAR_ACCESS_TOKEN;
+  // Read credentials
+  const linearToken = await getLinearToken();
   const linearWebhookSecret = process.env.LINEAR_WEBHOOK_SECRET;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
 
   if (!anthropicKey) {
     throw new Error('Missing required environment variable: ANTHROPIC_API_KEY');
-  }
-
-  if (!linearToken) {
-    throw new Error('Missing required environment variable: LINEAR_ACCESS_TOKEN');
   }
 
   // Initialize Linear platform
