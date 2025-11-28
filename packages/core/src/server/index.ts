@@ -22,7 +22,7 @@ export interface SniffServerConfig {
   port: number;
   platform: Platform;
   agents: AgentConfig[];
-  llmClient: AnthropicClient;
+  llmClient: AnthropicClient | null;
   apiKey?: string;
 }
 
@@ -124,6 +124,13 @@ export function createSniffServer(config: SniffServerConfig): SniffServer {
 
     // Webhook endpoint
     if (req.method === 'POST' && req.url === '/webhook/linear') {
+      // Check if LLM client is configured
+      if (!llmClient) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Server not configured. Set ANTHROPIC_API_KEY.' }));
+        return;
+      }
+
       try {
         const body = await readBody(req);
         const signature = (req.headers['linear-signature'] as string) || '';

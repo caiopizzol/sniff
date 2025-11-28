@@ -19,7 +19,7 @@ export interface StartServerOptions {
 /**
  * Get Linear access token from env var or storage
  */
-async function getLinearToken(): Promise<string> {
+async function getLinearToken(): Promise<string | null> {
   // First check environment variable
   const envToken = process.env.LINEAR_ACCESS_TOKEN;
   if (envToken) {
@@ -37,9 +37,7 @@ async function getLinearToken(): Promise<string> {
     storage.close();
   }
 
-  throw new Error(
-    'No Linear access token found. Set LINEAR_ACCESS_TOKEN env var or run `sniff auth linear`.',
-  );
+  return null;
 }
 
 /**
@@ -68,25 +66,39 @@ export async function startServer(options: StartServerOptions = {}): Promise<voi
   const linearWebhookSecret = process.env.LINEAR_WEBHOOK_SECRET;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
 
-  if (!anthropicKey) {
+  // Only require credentials when there's a config with agents
+  const hasAgents = config && config.agents.length > 0;
+
+  if (hasAgents && !linearToken) {
+    throw new Error(
+      'No Linear access token found. Set LINEAR_ACCESS_TOKEN env var or run `sniff auth linear`.',
+    );
+  }
+
+  if (hasAgents && !anthropicKey) {
     throw new Error('Missing required environment variable: ANTHROPIC_API_KEY');
   }
 
-  // Initialize Linear platform
-  console.log('Initializing Linear platform...');
+  // Initialize Linear platform (if token available)
   const platform = new LinearPlatform();
-  platform.initialize({
-    accessToken: linearToken,
-    webhookSecret: linearWebhookSecret || undefined,
-  });
-  console.log('Linear platform initialized');
+  if (linearToken) {
+    console.log('Initializing Linear platform...');
+    platform.initialize({
+      accessToken: linearToken,
+      webhookSecret: linearWebhookSecret || undefined,
+    });
+    console.log('Linear platform initialized');
+  } else {
+    console.log('Linear platform not initialized (no token). Set LINEAR_ACCESS_TOKEN to enable.');
+  }
 
-  // Initialize LLM client
-  console.log('Initializing LLM client...');
-  const llmClient = createAnthropicClient({
-    apiKey: anthropicKey,
-  });
-  console.log('LLM client initialized');
+  // Initialize LLM client (if key available)
+  const llmClient = anthropicKey ? createAnthropicClient({ apiKey: anthropicKey }) : null;
+  if (llmClient) {
+    console.log('LLM client initialized');
+  } else {
+    console.log('LLM client not initialized (no API key). Set ANTHROPIC_API_KEY to enable.');
+  }
 
   // Convert config agents to AgentConfig format (empty if no config yet)
   const agents: AgentConfig[] = config
