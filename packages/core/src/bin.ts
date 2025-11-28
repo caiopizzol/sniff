@@ -9,6 +9,7 @@
 import { startServer } from './server/start.js';
 
 startServer().catch((error) => {
-  console.error('Failed to start server:', error.message);
+  console.error('Failed to start server:', error.message || error);
+  if (error.stack) console.error(error.stack);
   process.exit(1);
 });

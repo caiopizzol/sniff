@@ -12,6 +12,7 @@ import type { Activity, ActivityContext, ConversationMessage, LinearCredentials 
  */
 export interface Platform {
   readonly name: 'linear';
+  readonly isInitialized: boolean;
 
   initialize(credentials: LinearCredentials): void;
 

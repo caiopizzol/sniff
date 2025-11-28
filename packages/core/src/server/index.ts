@@ -16,7 +16,7 @@ import type { AnthropicClient } from '../llm/anthropic.js';
 import { runAgent, type AgentConfig } from '../agent/runner.js';
 import type { LinearWebhook } from '@usepolvo/linear';
 import { parseAndValidateConfig } from '@sniff-dev/config';
-import { createConfigStorage } from '../storage/index.js';
+import { setConfig, createTokenStorage } from '../storage/index.js';
 import { createLinearOAuth } from '../auth/oauth.js';
 import { handleAuthStart, handleAuthCallback } from './auth.js';
 
@@ -88,7 +88,25 @@ export function createSniffServer(config: SniffServerConfig): SniffServer {
         res.end(JSON.stringify({ error: 'OAuth not configured' }));
         return;
       }
-      await handleAuthCallback(req, res, { oauth });
+      await handleAuthCallback(req, res, {
+        oauth,
+        onSuccess: async () => {
+          // Initialize platform with the new token
+          const storage = createTokenStorage();
+          try {
+            const tokens = await storage.get();
+            if (tokens?.accessToken) {
+              platform.initialize({
+                accessToken: tokens.accessToken,
+                webhookSecret: process.env.LINEAR_WEBHOOK_SECRET,
+              });
+              console.log('Linear platform initialized after OAuth');
+            }
+          } finally {
+            storage.close();
+          }
+        },
+      });
       return;
     }
 
@@ -150,12 +168,7 @@ export function createSniffServer(config: SniffServerConfig): SniffServer {
         currentAgents = newAgents;
 
         // Persist config to DB
-        const configStorage = createConfigStorage();
-        try {
-          await configStorage.set(yamlContent);
-        } finally {
-          configStorage.close();
-        }
+        await setConfig(yamlContent);
 
         console.log(`Deployed ${currentAgents.length} agent(s)`);
 
@@ -203,6 +216,15 @@ export function createSniffServer(config: SniffServerConfig): SniffServer {
         if (!llmClient) {
           res.writeHead(503, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Server not configured. Set ANTHROPIC_API_KEY.' }));
+          return;
+        }
+
+        // Check if platform is initialized (required for agent webhooks)
+        if (!platform.isInitialized) {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({ error: 'Linear platform not initialized. Authenticate via OAuth.' }),
+          );
           return;
         }
 

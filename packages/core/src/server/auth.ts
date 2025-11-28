@@ -26,7 +26,7 @@ setInterval(() => {
 
 export interface AuthEndpointsConfig {
   oauth: OAuth2Auth;
-  onSuccess?: () => void;
+  onSuccess?: () => void | Promise<void>;
 }
 
 /**
@@ -92,7 +92,7 @@ export async function handleAuthCallback(
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end('<h1>Authorization successful!</h1><p>You can close this window.</p>');
 
-    config.onSuccess?.();
+    await config.onSuccess?.();
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     res.writeHead(500, { 'Content-Type': 'text/html' });

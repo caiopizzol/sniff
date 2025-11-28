@@ -146,6 +146,29 @@ export async function hasToken(): Promise<boolean> {
   }
 }
 
+/**
+ * Get the first available token (for single-tenant mode)
+ */
+export async function getFirstToken(): Promise<OAuth2Tokens | null> {
+  await initDatabase();
+  const client = await getPool().connect();
+  try {
+    const result = await client.query(
+      'SELECT access_token, refresh_token, expires_at FROM tokens LIMIT 1',
+    );
+    if (result.rows.length === 0) return null;
+
+    const row = result.rows[0];
+    return {
+      accessToken: row.access_token,
+      refreshToken: row.refresh_token || undefined,
+      expiresAt: row.expires_at ? Number(row.expires_at) : undefined,
+    };
+  } finally {
+    client.release();
+  }
+}
+
 // Re-export database utilities and config storage
 export { initDatabase, closeDatabase } from './db.js';
-export { createConfigStorage, type ConfigStorage } from './config.js';
+export { createConfigStorage, getConfig, setConfig, type ConfigStorage } from './config.js';

@@ -9,7 +9,7 @@ import { parseAndValidateConfig } from '@sniff-dev/config';
 import { createSniffServer, type SniffServerConfig } from './index.js';
 import { LinearPlatform } from '../platforms/index.js';
 import { createAnthropicClient } from '../llm/anthropic.js';
-import { createTokenStorage, createConfigStorage } from '../storage/index.js';
+import { getFirstToken, getConfig } from '../storage/index.js';
 import type { AgentConfig } from '../agent/runner.js';
 
 export interface StartServerOptions {
@@ -20,17 +20,8 @@ export interface StartServerOptions {
  * Get Linear access token from storage (set via OAuth flow)
  */
 async function getLinearToken(): Promise<string | null> {
-  const storage = createTokenStorage();
-  try {
-    const tokens = await storage.get();
-    if (tokens?.accessToken) {
-      return tokens.accessToken;
-    }
-  } finally {
-    storage.close();
-  }
-
-  return null;
+  const tokens = await getFirstToken();
+  return tokens?.accessToken ?? null;
 }
 
 /**
@@ -39,13 +30,7 @@ async function getLinearToken(): Promise<string | null> {
 export async function startServer(options: StartServerOptions = {}): Promise<void> {
   // Load configuration from DB (if exists)
   console.log('Loading configuration from database...');
-  const configStorage = createConfigStorage();
-  let yamlContent: string | null;
-  try {
-    yamlContent = await configStorage.get();
-  } finally {
-    configStorage.close();
-  }
+  const yamlContent = await getConfig();
 
   const config = yamlContent ? parseAndValidateConfig(yamlContent) : null;
   if (config) {
@@ -72,6 +57,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<voi
 
   // Read credentials
   const linearToken = await getLinearToken();
+  console.log('Linear token from DB:', linearToken ? 'found' : 'not found');
   const linearWebhookSecret = process.env.LINEAR_WEBHOOK_SECRET;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
 

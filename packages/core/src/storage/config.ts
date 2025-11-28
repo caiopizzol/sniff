@@ -4,9 +4,6 @@
 
 import { getPool, initDatabase } from './db.js';
 
-// Fixed UUID for default config (single-tenant)
-const DEFAULT_CONFIG_ID = '00000000-0000-0000-0000-000000000002';
-
 /**
  * Interface for config storage
  */
@@ -21,13 +18,15 @@ export interface ConfigStorage {
  * PostgreSQL-backed config storage
  */
 export class PostgresConfigStorage implements ConfigStorage {
-  private id: string;
+  private id: string | undefined;
 
-  constructor(id: string = DEFAULT_CONFIG_ID) {
+  constructor(id?: string) {
     this.id = id;
   }
 
   async get(): Promise<string | null> {
+    if (!this.id) return null;
+
     await initDatabase();
     const client = await getPool().connect();
     try {
@@ -44,26 +43,31 @@ export class PostgresConfigStorage implements ConfigStorage {
     await initDatabase();
     const client = await getPool().connect();
     try {
-      await client.query(
-        `
-        INSERT INTO config (id, yaml_content, updated_at)
-        VALUES ($1, $2, NOW())
-        ON CONFLICT (id) DO UPDATE SET
-          yaml_content = EXCLUDED.yaml_content,
-          updated_at = NOW()
-        `,
-        [this.id, yaml],
-      );
+      if (this.id) {
+        await client.query(
+          `UPDATE config SET yaml_content = $2, updated_at = NOW() WHERE id = $1`,
+          [this.id, yaml],
+        );
+      } else {
+        const result = await client.query(
+          `INSERT INTO config (yaml_content, updated_at) VALUES ($1, NOW()) RETURNING id`,
+          [yaml],
+        );
+        this.id = result.rows[0].id;
+      }
     } finally {
       client.release();
     }
   }
 
   async clear(): Promise<void> {
+    if (!this.id) return;
+
     await initDatabase();
     const client = await getPool().connect();
     try {
       await client.query('DELETE FROM config WHERE id = $1', [this.id]);
+      this.id = undefined;
     } finally {
       client.release();
     }
@@ -79,4 +83,34 @@ export class PostgresConfigStorage implements ConfigStorage {
  */
 export function createConfigStorage(id?: string): PostgresConfigStorage {
   return new PostgresConfigStorage(id);
+}
+
+/**
+ * Get the current config (single-tenant)
+ */
+export async function getConfig(): Promise<string | null> {
+  await initDatabase();
+  const client = await getPool().connect();
+  try {
+    const result = await client.query('SELECT yaml_content FROM config LIMIT 1');
+    if (result.rows.length === 0) return null;
+    return result.rows[0].yaml_content;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Set the config (single-tenant, replaces any existing)
+ */
+export async function setConfig(yaml: string): Promise<void> {
+  await initDatabase();
+  const client = await getPool().connect();
+  try {
+    // Clear existing and insert new
+    await client.query('DELETE FROM config');
+    await client.query(`INSERT INTO config (yaml_content, updated_at) VALUES ($1, NOW())`, [yaml]);
+  } finally {
+    client.release();
+  }
 }

@@ -37,6 +37,10 @@ export class LinearPlatform implements Platform {
   private client: LinearClient | null = null;
   private webhookSecret: string | null = null;
 
+  get isInitialized(): boolean {
+    return this.client !== null;
+  }
+
   initialize(credentials: LinearCredentials): void {
     this.client = new LinearClient({ accessToken: credentials.accessToken });
     this.webhookSecret = credentials.webhookSecret || null;

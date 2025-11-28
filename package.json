@@ -23,7 +23,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "pnpm --recursive typecheck"
+    "typecheck": "pnpm --recursive typecheck",
+    "db:shell": "docker compose exec postgres psql -U sniff -d sniff"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
