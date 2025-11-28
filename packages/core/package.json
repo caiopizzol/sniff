@@ -41,17 +41,17 @@
     "@sniff-dev/config": "workspace:*",
     "@usepolvo/core": "^1.2.0",
     "@usepolvo/linear": "^1.2.0",
-    "better-sqlite3": "^12.4.6",
+    "pg": "^8.16.3",
     "zod": "^4.1.13"
   },
   "devDependencies": {
     "@anolilab/semantic-release-pnpm": "^3.1.0",
-    "@types/better-sqlite3": "^7.6.13",
     "@semantic-release/commit-analyzer": "^13.0.1",
     "@semantic-release/git": "^10.0.1",
     "@semantic-release/github": "^12.0.2",
     "@semantic-release/release-notes-generator": "^14.1.0",
     "@types/node": "^24.10.1",
+    "@types/pg": "^8.15.6",
     "semantic-release": "^25.0.2",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"

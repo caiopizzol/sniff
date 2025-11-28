@@ -9,15 +9,31 @@
 # Configure your Linear webhook to point to: http://your-server:3000/webhook/linear
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sniff
+      POSTGRES_USER: sniff
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sniff}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sniff -d sniff']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   sniff:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
       - '${PORT:-3000}:${PORT:-3000}'
-    volumes:
-      - sniff-data:/home/sniff/.sniff
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
+      - DATABASE_URL=postgresql://sniff:${POSTGRES_PASSWORD:-sniff}@postgres:5432/sniff
       - LINEAR_ACCESS_TOKEN=${LINEAR_ACCESS_TOKEN}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - SNIFF_API_KEY=${SNIFF_API_KEY:-}
@@ -39,4 +55,4 @@ services:
       start_period: 10s
 
 volumes:
-  sniff-data:
+  postgres-data:

@@ -1,13 +1,11 @@
 /**
- * Token storage for OAuth2
- *
- * Implements Polvo's TokenStorage interface with SQLite backend.
+ * PostgreSQL storage for OAuth2 tokens
  */
 
-import Database from 'better-sqlite3';
-import { join } from 'node:path';
-import { mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { getPool, initDatabase } from './db.js';
+
+// Fixed UUID for Linear OAuth tokens (single-tenant)
+const LINEAR_TOKEN_ID = '00000000-0000-0000-0000-000000000001';
 
 /**
  * OAuth2 token data
@@ -28,82 +26,80 @@ export interface TokenStorage {
 }
 
 /**
- * Get or create the SQLite database
+ * PostgreSQL-backed token storage
  */
-function getDatabase(dbPath?: string): Database.Database {
-  const defaultPath = join(homedir(), '.sniff', 'data.db');
-  const path = dbPath || defaultPath;
+export class PostgresTokenStorage implements TokenStorage {
+  private id: string;
 
-  mkdirSync(join(homedir(), '.sniff'), { recursive: true });
-
-  const db = new Database(path);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS tokens (
-      key TEXT PRIMARY KEY,
-      access_token TEXT NOT NULL,
-      refresh_token TEXT,
-      expires_at INTEGER
-    )
-  `);
-
-  return db;
-}
-
-/**
- * SQLite-backed token storage
- */
-export class SQLiteTokenStorage implements TokenStorage {
-  private db: Database.Database;
-  private key: string;
-
-  constructor(dbPath?: string, key: string = 'linear') {
-    this.db = getDatabase(dbPath);
-    this.key = key;
+  constructor(id: string = LINEAR_TOKEN_ID) {
+    this.id = id;
   }
 
   async get(): Promise<OAuth2Tokens | null> {
-    const row = this.db
-      .prepare('SELECT access_token, refresh_token, expires_at FROM tokens WHERE key = ?')
-      .get(this.key) as
-      | { access_token: string; refresh_token: string | null; expires_at: number | null }
-      | undefined;
+    await initDatabase();
+    const client = await getPool().connect();
+    try {
+      const result = await client.query(
+        'SELECT access_token, refresh_token, expires_at FROM tokens WHERE id = $1',
+        [this.id],
+      );
 
-    if (!row) return null;
+      if (result.rows.length === 0) return null;
 
-    return {
-      accessToken: row.access_token,
-      refreshToken: row.refresh_token || undefined,
-      expiresAt: row.expires_at || undefined,
-    };
+      const row = result.rows[0];
+      return {
+        accessToken: row.access_token,
+        refreshToken: row.refresh_token || undefined,
+        expiresAt: row.expires_at ? Number(row.expires_at) : undefined,
+      };
+    } finally {
+      client.release();
+    }
   }
 
   async set(tokens: OAuth2Tokens): Promise<void> {
-    this.db
-      .prepare(
+    await initDatabase();
+    const client = await getPool().connect();
+    try {
+      await client.query(
         `
-        INSERT OR REPLACE INTO tokens (key, access_token, refresh_token, expires_at)
-        VALUES (?, ?, ?, ?)
-      `,
-      )
-      .run(this.key, tokens.accessToken, tokens.refreshToken || null, tokens.expiresAt || null);
+        INSERT INTO tokens (id, access_token, refresh_token, expires_at, updated_at)
+        VALUES ($1, $2, $3, $4, NOW())
+        ON CONFLICT (id) DO UPDATE SET
+          access_token = EXCLUDED.access_token,
+          refresh_token = EXCLUDED.refresh_token,
+          expires_at = EXCLUDED.expires_at,
+          updated_at = NOW()
+        `,
+        [this.id, tokens.accessToken, tokens.refreshToken || null, tokens.expiresAt || null],
+      );
+    } finally {
+      client.release();
+    }
   }
 
   async clear(): Promise<void> {
-    this.db.prepare('DELETE FROM tokens WHERE key = ?').run(this.key);
+    await initDatabase();
+    const client = await getPool().connect();
+    try {
+      await client.query('DELETE FROM tokens WHERE id = $1', [this.id]);
+    } finally {
+      client.release();
+    }
   }
 
   close(): void {
-    this.db.close();
+    // No-op for PostgreSQL (pool is shared)
   }
 }
 
 /**
- * Create a SQLite token storage instance
+ * Create a PostgreSQL token storage instance
  */
-export function createTokenStorage(dbPath?: string, key?: string): SQLiteTokenStorage {
-  return new SQLiteTokenStorage(dbPath, key);
+export function createTokenStorage(id?: string): PostgresTokenStorage {
+  return new PostgresTokenStorage(id);
 }
 
-// Re-export config storage
+// Re-export database utilities and config storage
+export { initDatabase, closeDatabase } from './db.js';
 export { createConfigStorage, type ConfigStorage } from './config.js';

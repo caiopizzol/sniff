@@ -1,13 +1,11 @@
 /**
- * Config storage for deployed agent configurations
- *
- * Stores YAML config in SQLite, similar to token storage.
+ * PostgreSQL config storage for deployed agent configurations
  */
 
-import Database from 'better-sqlite3';
-import { join } from 'node:path';
-import { mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { getPool, initDatabase } from './db.js';
+
+// Fixed UUID for default config (single-tenant)
+const DEFAULT_CONFIG_ID = '00000000-0000-0000-0000-000000000002';
 
 /**
  * Interface for config storage
@@ -20,70 +18,65 @@ export interface ConfigStorage {
 }
 
 /**
- * Get or create the SQLite database with config table
+ * PostgreSQL-backed config storage
  */
-function getDatabase(dbPath?: string): Database.Database {
-  const defaultPath = join(homedir(), '.sniff', 'data.db');
-  const path = dbPath || defaultPath;
+export class PostgresConfigStorage implements ConfigStorage {
+  private id: string;
 
-  mkdirSync(join(homedir(), '.sniff'), { recursive: true });
-
-  const db = new Database(path);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS config (
-      key TEXT PRIMARY KEY DEFAULT 'default',
-      yaml_content TEXT NOT NULL,
-      updated_at INTEGER NOT NULL
-    )
-  `);
-
-  return db;
-}
-
-/**
- * SQLite-backed config storage
- */
-export class SQLiteConfigStorage implements ConfigStorage {
-  private db: Database.Database;
-  private key: string;
-
-  constructor(dbPath?: string, key: string = 'default') {
-    this.db = getDatabase(dbPath);
-    this.key = key;
+  constructor(id: string = DEFAULT_CONFIG_ID) {
+    this.id = id;
   }
 
   async get(): Promise<string | null> {
-    const row = this.db.prepare('SELECT yaml_content FROM config WHERE key = ?').get(this.key) as
-      | { yaml_content: string }
-      | undefined;
+    await initDatabase();
+    const client = await getPool().connect();
+    try {
+      const result = await client.query('SELECT yaml_content FROM config WHERE id = $1', [this.id]);
 
-    return row?.yaml_content || null;
+      if (result.rows.length === 0) return null;
+      return result.rows[0].yaml_content;
+    } finally {
+      client.release();
+    }
   }
 
   async set(yaml: string): Promise<void> {
-    this.db
-      .prepare(
+    await initDatabase();
+    const client = await getPool().connect();
+    try {
+      await client.query(
         `
-        INSERT OR REPLACE INTO config (key, yaml_content, updated_at)
-        VALUES (?, ?, ?)
-      `,
-      )
-      .run(this.key, yaml, Date.now());
+        INSERT INTO config (id, yaml_content, updated_at)
+        VALUES ($1, $2, NOW())
+        ON CONFLICT (id) DO UPDATE SET
+          yaml_content = EXCLUDED.yaml_content,
+          updated_at = NOW()
+        `,
+        [this.id, yaml],
+      );
+    } finally {
+      client.release();
+    }
   }
 
   async clear(): Promise<void> {
-    this.db.prepare('DELETE FROM config WHERE key = ?').run(this.key);
+    await initDatabase();
+    const client = await getPool().connect();
+    try {
+      await client.query('DELETE FROM config WHERE id = $1', [this.id]);
+    } finally {
+      client.release();
+    }
   }
 
   close(): void {
-    this.db.close();
+    // No-op for PostgreSQL (pool is shared)
   }
 }
 
 /**
- * Create a SQLite config storage instance
+ * Create a PostgreSQL config storage instance
  */
-export function createConfigStorage(dbPath?: string, key?: string): SQLiteConfigStorage {
-  return new SQLiteConfigStorage(dbPath, key);
+export function createConfigStorage(id?: string): PostgresConfigStorage {
+  return new PostgresConfigStorage(id);
 }
