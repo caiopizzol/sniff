@@ -19,7 +19,7 @@ export interface AuthResult {
  * 1. Starts a temporary local server
  * 2. Opens the authorization URL in the browser
  * 3. Handles the callback and exchanges the code for tokens
- * 4. Stores tokens in SQLite
+ * 4. Stores tokens in PostgreSQL
  */
 export async function authenticateLinear(config: LinearOAuthConfig): Promise<AuthResult> {
   const port = new URL(config.redirectUri).port || '3000';

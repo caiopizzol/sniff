@@ -17,6 +17,8 @@ import { runAgent, type AgentConfig } from '../agent/runner.js';
 import type { LinearWebhook } from '@usepolvo/linear';
 import { parseAndValidateConfig } from '@sniff-dev/config';
 import { createConfigStorage } from '../storage/index.js';
+import { createLinearOAuth } from '../auth/oauth.js';
+import { handleAuthStart, handleAuthCallback } from './auth.js';
 
 export interface SniffServerConfig {
   port: number;
@@ -24,6 +26,11 @@ export interface SniffServerConfig {
   agents: AgentConfig[];
   llmClient: AnthropicClient | null;
   apiKey?: string;
+  oauth?: {
+    clientId: string;
+    clientSecret: string;
+    redirectUri: string;
+  };
 }
 
 export interface SniffServer {
@@ -37,16 +44,51 @@ export interface SniffServer {
  * Create a Sniff server instance
  */
 export function createSniffServer(config: SniffServerConfig): SniffServer {
-  const { port, platform, llmClient, apiKey } = config;
+  const { port, platform, llmClient, apiKey, oauth: oauthConfig } = config;
 
   // Mutable agents array for hot-reload
   let currentAgents = [...config.agents];
+
+  // Create OAuth client if credentials provided
+  const oauth = oauthConfig
+    ? createLinearOAuth({
+        clientId: oauthConfig.clientId,
+        clientSecret: oauthConfig.clientSecret,
+        redirectUri: oauthConfig.redirectUri,
+      })
+    : null;
 
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     // Health check
     if (req.method === 'GET' && req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'ok' }));
+      return;
+    }
+
+    // OAuth: Start authorization
+    if (req.method === 'GET' && req.url === '/auth/linear') {
+      if (!oauth) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            error: 'OAuth not configured. Set LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET.',
+          }),
+        );
+        return;
+      }
+      handleAuthStart(req, res, { oauth });
+      return;
+    }
+
+    // OAuth: Handle callback
+    if (req.method === 'GET' && req.url?.startsWith('/auth/linear/callback')) {
+      if (!oauth) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'OAuth not configured' }));
+        return;
+      }
+      await handleAuthCallback(req, res, { oauth });
       return;
     }
 

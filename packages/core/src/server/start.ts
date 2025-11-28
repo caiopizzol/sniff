@@ -123,6 +123,19 @@ export async function startServer(options: StartServerOptions = {}): Promise<voi
   // Get API key for remote deploy (optional)
   const apiKey = process.env.SNIFF_API_KEY;
 
+  // OAuth config (optional, for cloud auth flow)
+  const linearClientId = process.env.LINEAR_CLIENT_ID;
+  const linearClientSecret = process.env.LINEAR_CLIENT_SECRET;
+  const serverUrl = process.env.SNIFF_SERVER_URL || `http://localhost:${port}`;
+  const oauth =
+    linearClientId && linearClientSecret
+      ? {
+          clientId: linearClientId,
+          clientSecret: linearClientSecret,
+          redirectUri: `${serverUrl.replace(/\/$/, '')}/auth/linear/callback`,
+        }
+      : undefined;
+
   // Create and start server
   const serverConfig: SniffServerConfig = {
     port,
@@ -130,6 +143,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<voi
     agents,
     llmClient,
     apiKey,
+    oauth,
   };
 
   const server = createSniffServer(serverConfig);
@@ -159,5 +173,8 @@ export async function startServer(options: StartServerOptions = {}): Promise<voi
     );
   }
   console.log(`\nWebhook: POST http://localhost:${port}/webhook/linear`);
+  if (oauth) {
+    console.log(`OAuth: ${serverUrl}/auth/linear`);
+  }
   console.log('\nPress Ctrl+C to stop');
 }

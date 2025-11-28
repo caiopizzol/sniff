@@ -4,6 +4,14 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { authenticateLinear } from '@sniff-dev/core';
 
+function getDefaultRedirectUri(): string {
+  const serverUrl = process.env.SNIFF_SERVER_URL;
+  if (serverUrl) {
+    return `${serverUrl.replace(/\/$/, '')}/auth/linear/callback`;
+  }
+  return 'http://localhost:3000/auth/linear/callback';
+}
+
 export const auth = new Command('auth').description('Authenticate with Linear').addCommand(
   new Command('linear')
     .description('Authenticate with Linear via OAuth2')
@@ -12,14 +20,11 @@ export const auth = new Command('auth').description('Authenticate with Linear').
       '--client-secret <secret>',
       'Linear OAuth app client secret (or LINEAR_CLIENT_SECRET env)',
     )
-    .option(
-      '--redirect-uri <uri>',
-      'OAuth redirect URI',
-      'http://localhost:3000/auth/linear/callback',
-    )
-    .action(async (options: { clientId?: string; clientSecret?: string; redirectUri: string }) => {
+    .option('--redirect-uri <uri>', 'OAuth redirect URI (or uses SNIFF_SERVER_URL)')
+    .action(async (options: { clientId?: string; clientSecret?: string; redirectUri?: string }) => {
       const clientId = options.clientId || process.env.LINEAR_CLIENT_ID;
       const clientSecret = options.clientSecret || process.env.LINEAR_CLIENT_SECRET;
+      const redirectUri = options.redirectUri || getDefaultRedirectUri();
 
       if (!clientId || !clientSecret) {
         console.error(chalk.red('Missing client credentials.'));
@@ -30,18 +35,19 @@ export const auth = new Command('auth').description('Authenticate with Linear').
 
       console.log(chalk.bold('\nLinear OAuth2 Authentication\n'));
       console.log(chalk.gray('This will open a browser window to authorize with Linear.'));
-      console.log(chalk.gray('Your tokens will be stored locally in ~/.sniff/data.db\n'));
+      console.log(chalk.gray('Your tokens will be stored in the database.\n'));
 
       const spinner = ora('Starting auth server...').start();
 
       try {
         spinner.text = 'Waiting for authorization...';
         spinner.info();
+        console.log(chalk.gray(`Callback URL: ${redirectUri}\n`));
 
         const result = await authenticateLinear({
           clientId,
           clientSecret,
-          redirectUri: options.redirectUri,
+          redirectUri,
         });
 
         if (result.success) {
