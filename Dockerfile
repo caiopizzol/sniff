@@ -23,10 +23,11 @@ COPY tsconfig.json ./
 RUN pnpm --filter @sniff-dev/config build && \
     pnpm --filter @sniff-dev/core build
 
-# Create non-root user
+# Create non-root user with home directory
 RUN addgroup -g 1001 -S sniff && \
-    adduser -S sniff -u 1001 -G sniff && \
-    chown -R sniff:sniff /app
+    adduser -S sniff -u 1001 -G sniff -h /home/sniff && \
+    mkdir -p /home/sniff/.sniff && \
+    chown -R sniff:sniff /app /home/sniff
 
 USER sniff
 

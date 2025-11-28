@@ -1,89 +1,21 @@
 /**
- * Direct Linear GraphQL client
+ * Linear GraphQL client
  *
- * Makes authenticated requests to Linear's GraphQL API
- * without any proxy layer (replacing Ampersand).
+ * Re-exports from @usepolvo/linear with Sniff-specific GraphQL queries.
  */
 
-const LINEAR_API_URL = 'https://api.linear.app/graphql';
-
-export interface LinearClientConfig {
-  accessToken: string;
-}
-
-export interface GraphQLResponse<T = unknown> {
-  data?: T;
-  errors?: Array<{
-    message: string;
-    locations?: Array<{ line: number; column: number }>;
-    path?: string[];
-  }>;
-}
-
-/**
- * Error thrown when Linear API requests fail
- */
-export class LinearApiError extends Error {
-  constructor(
-    message: string,
-    public readonly statusCode?: number,
-    public readonly graphqlErrors?: GraphQLResponse['errors'],
-  ) {
-    super(message);
-    this.name = 'LinearApiError';
-  }
-}
-
-/**
- * Linear GraphQL client for direct API access
- */
-export class LinearClient {
-  private accessToken: string;
-
-  constructor(config: LinearClientConfig) {
-    this.accessToken = config.accessToken;
-  }
-
-  /**
-   * Execute a GraphQL query/mutation
-   */
-  async request<T = unknown>(query: string, variables?: Record<string, unknown>): Promise<T> {
-    const response = await fetch(LINEAR_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: this.accessToken,
-      },
-      body: JSON.stringify({
-        query,
-        variables,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new LinearApiError(
-        `Linear API request failed: ${response.status} - ${errorText}`,
-        response.status,
-      );
-    }
-
-    const result = (await response.json()) as GraphQLResponse<T>;
-
-    if (result.errors && result.errors.length > 0) {
-      throw new LinearApiError(
-        `GraphQL errors: ${result.errors.map((e) => e.message).join(', ')}`,
-        undefined,
-        result.errors,
-      );
-    }
-
-    return result.data as T;
-  }
-}
+// Re-export Polvo's client and types
+export {
+  LinearClient,
+  LinearApiError,
+  type LinearClientConfig,
+  type GraphQLResponse,
+} from '@usepolvo/linear';
 
 // ─────────────────────────────────────────────────────────────
-// GraphQL Queries
+// Sniff-specific GraphQL Queries
+// These queries are specific to Sniff's needs and may be added
+// to @usepolvo/linear in the future.
 // ─────────────────────────────────────────────────────────────
 
 export const QUERIES = {

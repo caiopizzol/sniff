@@ -1,11 +1,12 @@
 /**
  * Agent Runner
  *
- * Executes an agent in response to a platform event.
- * Uses the platform abstraction for all I/O and the LLM for reasoning.
+ * Executes an agent in response to a Linear webhook.
  */
 
-import type { Platform, PlatformEvent, NormalizedIssue } from '../platforms/index.js';
+import type { LinearWebhook } from '@usepolvo/linear';
+import type { Platform } from '../platforms/platform.js';
+import { getIssueId, getUserMessage, getIssueContext } from '../platforms/types.js';
 import type { AnthropicClient } from '../llm/anthropic.js';
 
 export interface AgentConfig {
@@ -29,7 +30,7 @@ export interface AgentConfig {
 }
 
 export interface AgentRunOptions {
-  event: PlatformEvent;
+  webhook: LinearWebhook;
   config: AgentConfig;
   platform: Platform;
   llmClient: AnthropicClient;
@@ -45,17 +46,15 @@ export interface AgentRunResult {
 }
 
 /**
- * Run an agent in response to a platform event
+ * Run an agent in response to a Linear webhook
  */
 export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult> {
-  const { event, config, platform, llmClient, sessionId, conversationHistory } = options;
+  const { webhook, config, platform, llmClient, sessionId, conversationHistory } = options;
 
+  const issueId = getIssueId(webhook);
   const isConversation = !!conversationHistory && conversationHistory.length > 0;
-  const activityCtx = {
-    platform: platform.name,
-    issueId: event.issue.id,
-    sessionId,
-  };
+
+  const activityCtx = { issueId, sessionId };
 
   try {
     // 1. Send initial thinking activity
@@ -71,18 +70,19 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult
     let conversationMessages: Array<{ role: 'user' | 'assistant'; content: string }> | undefined;
 
     if (isConversation && conversationHistory) {
-      // Use conversation history for multi-turn
       conversationMessages = [...conversationHistory];
 
-      // Add the new user message from the event
-      if (event.comment?.body) {
-        conversationMessages.push({ role: 'user', content: event.comment.body });
+      // Add the new user message from the webhook
+      const userMessage = getUserMessage(webhook);
+      if (userMessage) {
+        conversationMessages.push({ role: 'user', content: userMessage });
       }
 
-      messageContent = ''; // Not used when conversationMessages is provided
+      messageContent = '';
     } else {
-      // Initial message: use issue data
-      messageContent = formatIssueForLLM(event.issue);
+      // Initial message: use issue context
+      const issueContext = getIssueContext(webhook);
+      messageContent = JSON.stringify(issueContext, null, 2);
     }
 
     // 3. Call LLM with callbacks for activities
@@ -96,7 +96,6 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult
       tools: config.model?.tools,
       mcpServers: config.model?.mcpServers,
 
-      // Send tool use activities
       onToolUse: async (tool) => {
         await platform.sendActivity(activityCtx, {
           type: 'tool_use',
@@ -106,7 +105,6 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult
         });
       },
 
-      // Send thinking activities
       onThinking: async (thinking) => {
         await platform.sendActivity(activityCtx, {
           type: 'thinking',
@@ -114,7 +112,6 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult
         });
       },
 
-      // Send interim text as thinking
       onInterimText: async (text) => {
         await platform.sendActivity(activityCtx, {
           type: 'thinking',
@@ -139,7 +136,6 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Agent run failed';
 
-    // Try to send error activity
     try {
       await platform.sendActivity(activityCtx, {
         type: 'error',
@@ -154,22 +150,4 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult
       error: errorMessage,
     };
   }
-}
-
-/**
- * Format issue data for the LLM
- */
-function formatIssueForLLM(issue: NormalizedIssue): string {
-  return JSON.stringify(
-    {
-      title: issue.title,
-      description: issue.description,
-      state: issue.state,
-      labels: issue.labels,
-      priority: issue.priority,
-      url: issue.url,
-    },
-    null,
-    2,
-  );
 }

@@ -2,42 +2,46 @@
  * Sniff Server
  *
  * A simple headless server that:
- * - Receives webhooks from platforms
+ * - Receives webhooks from Linear
  * - Routes them to the appropriate agent
  * - Executes agents using the LLM
- * - Sends responses back via the platform
+ * - Sends responses back via Linear
+ * - Provides API for remote deployment
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import type { Platform, PlatformEvent } from '../platforms/index.js';
+import type { Platform } from '../platforms/platform.js';
+import { getAgentSessionId } from '../platforms/types.js';
 import type { AnthropicClient } from '../llm/anthropic.js';
 import { runAgent, type AgentConfig } from '../agent/runner.js';
+import type { LinearWebhook } from '@usepolvo/linear';
+import { parseAndValidateConfig } from '@sniff-dev/config';
+import { createConfigStorage } from '../storage/index.js';
 
 export interface SniffServerConfig {
   port: number;
-  platforms: Platform[];
+  platform: Platform;
   agents: AgentConfig[];
-  llmClient: AnthropicClient;
+  llmClient: AnthropicClient | null;
+  apiKey?: string;
 }
 
 export interface SniffServer {
   start(): Promise<void>;
   stop(): Promise<void>;
+  updateAgents(agents: AgentConfig[]): void;
+  getAgents(): AgentConfig[];
 }
 
 /**
  * Create a Sniff server instance
  */
 export function createSniffServer(config: SniffServerConfig): SniffServer {
-  const { port, platforms, agents, llmClient } = config;
+  const { port, platform, llmClient, apiKey } = config;
 
-  // Create platform lookup map
-  const platformMap = new Map<string, Platform>();
-  for (const platform of platforms) {
-    platformMap.set(platform.name, platform);
-  }
+  // Mutable agents array for hot-reload
+  let currentAgents = [...config.agents];
 
-  // Create HTTP server
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     // Health check
     if (req.method === 'GET' && req.url === '/health') {
@@ -46,21 +50,90 @@ export function createSniffServer(config: SniffServerConfig): SniffServer {
       return;
     }
 
-    // Webhook endpoints: /webhook/:platform
-    if (req.method === 'POST' && req.url?.startsWith('/webhook/')) {
-      const platformName = req.url.replace('/webhook/', '');
-      const platform = platformMap.get(platformName);
+    // API: Get status
+    if (req.method === 'GET' && req.url === '/api/status') {
+      if (!checkApiAuth(req, res, apiKey)) return;
 
-      if (!platform) {
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: `Unknown platform: ${platformName}` }));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          status: 'ok',
+          agents: currentAgents.map((a) => ({ id: a.id, name: a.name })),
+        }),
+      );
+      return;
+    }
+
+    // API: Deploy config
+    if (req.method === 'POST' && req.url === '/api/deploy') {
+      if (!checkApiAuth(req, res, apiKey)) return;
+
+      try {
+        const body = await readBody(req);
+        const { config: yamlContent } = JSON.parse(body);
+
+        if (!yamlContent) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing config in request body' }));
+          return;
+        }
+
+        // Parse and validate the YAML config
+        const parsedConfig = parseAndValidateConfig(yamlContent);
+
+        // Convert to AgentConfig format
+        const newAgents: AgentConfig[] = parsedConfig.agents.map((agent) => ({
+          id: agent.id,
+          name: agent.name,
+          systemPrompt: agent.system_prompt,
+          model: {
+            name: agent.model.anthropic.name,
+            temperature: agent.model.anthropic.temperature,
+            maxTokens: agent.model.anthropic.max_tokens,
+            thinking: agent.model.anthropic.thinking,
+            tools: agent.model.anthropic.tools,
+            mcpServers: agent.model.anthropic.mcp_servers,
+          },
+        }));
+
+        currentAgents = newAgents;
+
+        // Persist config to DB
+        const configStorage = createConfigStorage();
+        try {
+          await configStorage.set(yamlContent);
+        } finally {
+          configStorage.close();
+        }
+
+        console.log(`Deployed ${currentAgents.length} agent(s)`);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            success: true,
+            agents: currentAgents.map((a) => ({ id: a.id, name: a.name })),
+          }),
+        );
+      } catch (error) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: (error as Error).message }));
+      }
+      return;
+    }
+
+    // Webhook endpoint
+    if (req.method === 'POST' && req.url === '/webhook/linear') {
+      // Check if LLM client is configured
+      if (!llmClient) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Server not configured. Set ANTHROPIC_API_KEY.' }));
         return;
       }
 
       try {
-        // Read request body
         const body = await readBody(req);
-        const signature = (req.headers['x-linear-signature'] as string) || '';
+        const signature = (req.headers['linear-signature'] as string) || '';
 
         // Verify webhook
         if (!platform.verifyWebhook(body, signature)) {
@@ -71,24 +144,23 @@ export function createSniffServer(config: SniffServerConfig): SniffServer {
 
         // Parse webhook
         const payload = JSON.parse(body);
-        const event = platform.parseWebhookEvent(payload);
+        const webhook = platform.parseWebhook(payload);
 
-        if (!event) {
-          // Event should be ignored
+        if (!webhook) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ status: 'ignored' }));
           return;
         }
 
-        // Check if we should process this event
-        if (!platform.shouldProcessEvent(event)) {
+        // Check if we should process
+        if (!platform.shouldProcess(webhook)) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ status: 'skipped' }));
           return;
         }
 
-        // Find matching agent
-        const agent = findAgentForEvent(agents, event);
+        // Find agent
+        const agent = findAgent(currentAgents, webhook);
         if (!agent) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ status: 'no_matching_agent' }));
@@ -99,10 +171,16 @@ export function createSniffServer(config: SniffServerConfig): SniffServer {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'processing' }));
 
-        // Run agent asynchronously
-        const sessionId = generateSessionId();
+        // Get session ID from webhook
+        const sessionId = getAgentSessionId(webhook);
+        if (!sessionId) {
+          console.error('No agent session ID in webhook');
+          return;
+        }
+
+        // Run agent
         runAgent({
-          event,
+          webhook,
           config: agent,
           platform,
           llmClient,
@@ -119,7 +197,7 @@ export function createSniffServer(config: SniffServerConfig): SniffServer {
       return;
     }
 
-    // 404 for unknown routes
+    // 404
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Not found' }));
   });
@@ -129,10 +207,8 @@ export function createSniffServer(config: SniffServerConfig): SniffServer {
       new Promise((resolve) => {
         server.listen(port, () => {
           console.log(`Sniff server listening on port ${port}`);
-          console.log(`Webhook endpoints:`);
-          for (const platform of platforms) {
-            console.log(`  - POST /webhook/${platform.name}`);
-          }
+          console.log(`Webhook endpoint: POST /webhook/linear`);
+          console.log(`API endpoints: GET /api/status, POST /api/deploy`);
           resolve();
         });
       }),
@@ -144,12 +220,16 @@ export function createSniffServer(config: SniffServerConfig): SniffServer {
           else resolve();
         });
       }),
+
+    updateAgents: (agents: AgentConfig[]) => {
+      currentAgents = agents;
+      console.log(`Updated agents: ${agents.length} agent(s)`);
+    },
+
+    getAgents: () => [...currentAgents],
   };
 }
 
-/**
- * Read request body as string
- */
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -159,21 +239,35 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-/**
- * Find an agent that should handle this event
- * For now, returns the first agent. Can be extended with filtering logic.
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function findAgentForEvent(agents: AgentConfig[], event: PlatformEvent): AgentConfig | null {
-  // TODO: Add filtering based on event type, labels, team, etc.
-  return agents[0] || null;
+function checkApiAuth(
+  req: IncomingMessage,
+  res: ServerResponse,
+  apiKey: string | undefined,
+): boolean {
+  // If no API key configured, allow all requests
+  if (!apiKey) return true;
+
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Missing or invalid Authorization header' }));
+    return false;
+  }
+
+  const token = authHeader.slice(7);
+  if (token !== apiKey) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Invalid API key' }));
+    return false;
+  }
+
+  return true;
 }
 
-/**
- * Generate a unique session ID
- */
-function generateSessionId(): string {
-  return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function findAgent(agents: AgentConfig[], webhook: LinearWebhook): AgentConfig | null {
+  // TODO: Add filtering based on webhook data
+  return agents[0] || null;
 }
 
 // Export startServer

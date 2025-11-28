@@ -18,11 +18,10 @@ Like Docker Compose for AI agents.
 
 ## How It Works
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│     Linear      │────▶│   Sniff Server  │────▶│   Anthropic     │
-│   (Webhook)     │     │   (Your Host)   │     │   (Claude API)  │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
+```mermaid
+flowchart LR
+  Linear[Linear<br/>Webhook] --> Sniff[Sniff Server<br/>Your Host]
+  Sniff --> Anthropic[Anthropic<br/>Claude API]
 ```
 
 1. **Linear sends webhook** → Issue created or updated

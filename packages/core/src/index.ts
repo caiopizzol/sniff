@@ -16,3 +16,9 @@ export * from './agent/index.js';
 
 // Server
 export * from './server/index.js';
+
+// Auth
+export * from './auth/index.js';
+
+// Storage
+export * from './storage/index.js';

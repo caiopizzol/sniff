@@ -34,10 +34,15 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "dev": "tsc --watch"
+    "dev": "tsx watch --clear-screen=false src/bin.ts",
+    "dev:build": "tsc --watch"
   },
   "dependencies": {
-    "@sniff-dev/config": "workspace:*"
+    "@sniff-dev/config": "workspace:*",
+    "@usepolvo/core": "^1.2.0",
+    "@usepolvo/linear": "^1.2.0",
+    "pg": "^8.16.3",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@anolilab/semantic-release-pnpm": "^3.1.0",
@@ -46,7 +51,9 @@
     "@semantic-release/github": "^12.0.2",
     "@semantic-release/release-notes-generator": "^14.1.0",
     "@types/node": "^24.10.1",
+    "@types/pg": "^8.15.6",
     "semantic-release": "^25.0.2",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   }
 }

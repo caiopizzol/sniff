@@ -9,17 +9,11 @@ Sniff connects Linear to Claude through webhooks. When something happens in Line
 
 ## Architecture
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│     Linear      │────▶│   Sniff Server  │────▶│   Anthropic     │
-│   (Webhook)     │     │   (Your Host)   │     │   (Claude API)  │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                               │
-                               ▼
-                        ┌─────────────────┐
-                        │   MCP Servers   │
-                        │   (Optional)    │
-                        └─────────────────┘
+```mermaid
+flowchart LR
+  Linear[Linear<br/>Webhook] --> Sniff[Sniff Server<br/>Your Host]
+  Sniff --> Anthropic[Anthropic<br/>Claude API]
+  Sniff --> MCP[MCP Servers<br/>Optional]
 ```
 
 ## The Agent Lifecycle

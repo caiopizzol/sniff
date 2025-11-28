@@ -2,89 +2,134 @@
  * Server Startup
  *
  * Entry point for running the Sniff server.
- * Loads config, initializes platforms and LLM, and starts the server.
+ * Loads config, initializes Linear and LLM, and starts the server.
  */
 
-import { loadConfig } from '@sniff-dev/config';
+import { parseAndValidateConfig } from '@sniff-dev/config';
 import { createSniffServer, type SniffServerConfig } from './index.js';
-import { LinearPlatform, type Platform } from '../platforms/index.js';
+import { LinearPlatform } from '../platforms/index.js';
 import { createAnthropicClient } from '../llm/anthropic.js';
+import { createTokenStorage, createConfigStorage } from '../storage/index.js';
 import type { AgentConfig } from '../agent/runner.js';
 
 export interface StartServerOptions {
-  configPath?: string;
   port?: number;
 }
 
 /**
+ * Get Linear access token from env var or storage
+ */
+async function getLinearToken(): Promise<string | null> {
+  // First check environment variable
+  const envToken = process.env.LINEAR_ACCESS_TOKEN;
+  if (envToken) {
+    return envToken;
+  }
+
+  // Fall back to stored OAuth2 token
+  const storage = createTokenStorage();
+  try {
+    const tokens = await storage.get();
+    if (tokens?.accessToken) {
+      return tokens.accessToken;
+    }
+  } finally {
+    storage.close();
+  }
+
+  return null;
+}
+
+/**
  * Start the Sniff server
- *
- * Reads configuration from YAML file and credentials from environment variables.
  */
 export async function startServer(options: StartServerOptions = {}): Promise<void> {
-  const configPath = options.configPath ?? 'sniff.yml';
+  // Load configuration from DB (if exists)
+  console.log('Loading configuration from database...');
+  const configStorage = createConfigStorage();
+  let yamlContent: string | null;
+  try {
+    yamlContent = await configStorage.get();
+  } finally {
+    configStorage.close();
+  }
 
-  // Load configuration
-  console.log('Loading configuration...');
-  const config = loadConfig(configPath);
-  console.log('Configuration loaded');
+  const config = yamlContent ? parseAndValidateConfig(yamlContent) : null;
+  if (config) {
+    console.log('Configuration loaded');
+  } else {
+    console.log('No config found. Deploy agents with: sniff deploy --server <url>');
+  }
 
-  // Read credentials from environment variables
-  const linearToken = process.env.LINEAR_ACCESS_TOKEN;
+  // Read credentials
+  const linearToken = await getLinearToken();
   const linearWebhookSecret = process.env.LINEAR_WEBHOOK_SECRET;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
 
-  // Validate required credentials
-  if (!anthropicKey) {
+  // Only require credentials when there's a config with agents
+  const hasAgents = config && config.agents.length > 0;
+
+  if (hasAgents && !linearToken) {
+    throw new Error(
+      'No Linear access token found. Set LINEAR_ACCESS_TOKEN env var or run `sniff auth linear`.',
+    );
+  }
+
+  if (hasAgents && !anthropicKey) {
     throw new Error('Missing required environment variable: ANTHROPIC_API_KEY');
   }
 
-  if (!linearToken) {
-    throw new Error('Missing required environment variable: LINEAR_ACCESS_TOKEN');
+  // Initialize Linear platform (if token available)
+  const platform = new LinearPlatform();
+  if (linearToken) {
+    console.log('Initializing Linear platform...');
+    platform.initialize({
+      accessToken: linearToken,
+      webhookSecret: linearWebhookSecret || undefined,
+    });
+    console.log('Linear platform initialized');
+  } else {
+    console.log('Linear platform not initialized (no token). Set LINEAR_ACCESS_TOKEN to enable.');
   }
 
-  // Initialize Linear platform
-  console.log('Initializing Linear platform...');
-  const platforms: Platform[] = [];
-  const linearPlatform = new LinearPlatform();
-  linearPlatform.initialize({
-    accessToken: linearToken,
-    webhookSecret: linearWebhookSecret || undefined,
-  });
-  platforms.push(linearPlatform);
-  console.log('Linear platform initialized');
+  // Initialize LLM client (if key available)
+  const llmClient = anthropicKey ? createAnthropicClient({ apiKey: anthropicKey }) : null;
+  if (llmClient) {
+    console.log('LLM client initialized');
+  } else {
+    console.log('LLM client not initialized (no API key). Set ANTHROPIC_API_KEY to enable.');
+  }
 
-  // Initialize LLM client
-  console.log('Initializing LLM client...');
-  const llmClient = createAnthropicClient({
-    apiKey: anthropicKey,
-  });
-  console.log('LLM client initialized');
+  // Convert config agents to AgentConfig format (empty if no config yet)
+  const agents: AgentConfig[] = config
+    ? config.agents.map((agent) => ({
+        id: agent.id,
+        name: agent.name,
+        systemPrompt: agent.system_prompt,
+        model: {
+          name: agent.model.anthropic.name,
+          temperature: agent.model.anthropic.temperature,
+          maxTokens: agent.model.anthropic.max_tokens,
+          thinking: agent.model.anthropic.thinking,
+          tools: agent.model.anthropic.tools,
+          mcpServers: agent.model.anthropic.mcp_servers,
+        },
+      }))
+    : [];
 
-  // Convert config agents to AgentConfig format
-  const agents: AgentConfig[] = config.agents.map((agent) => ({
-    id: agent.id,
-    name: agent.name,
-    systemPrompt: agent.system_prompt,
-    model: {
-      name: agent.model.anthropic.name,
-      temperature: agent.model.anthropic.temperature,
-      maxTokens: agent.model.anthropic.max_tokens,
-      thinking: agent.model.anthropic.thinking,
-      tools: agent.model.anthropic.tools,
-      mcpServers: agent.model.anthropic.mcp_servers,
-    },
-  }));
-
-  // Determine port: options > PORT env var > default 3000
+  // Determine port
   const port = options.port ?? (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
 
-  // Create server
+  // Get API key for remote deploy (optional)
+  const apiKey = process.env.SNIFF_API_KEY;
+
+  // Create and start server
   const serverConfig: SniffServerConfig = {
     port,
-    platforms,
+    platform,
     agents,
     llmClient,
+    apiKey,
   };
 
   const server = createSniffServer(serverConfig);
@@ -99,18 +144,20 @@ export async function startServer(options: StartServerOptions = {}): Promise<voi
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  // Start server
   console.log('\nStarting Sniff server...\n');
   await server.start();
 
   console.log('\nServer is running!');
-  console.log('\nAgents:');
-  for (const agent of agents) {
-    console.log(`  - ${agent.name} (${agent.id})`);
+  if (agents.length > 0) {
+    console.log('\nAgents:');
+    for (const agent of agents) {
+      console.log(`  - ${agent.name} (${agent.id})`);
+    }
+  } else {
+    console.log(
+      '\nNo agents configured. Deploy with: sniff deploy --server http://localhost:' + port,
+    );
   }
-  console.log('\nWebhooks:');
-  for (const platform of platforms) {
-    console.log(`  - POST http://localhost:${port}/webhook/${platform.name}`);
-  }
+  console.log(`\nWebhook: POST http://localhost:${port}/webhook/linear`);
   console.log('\nPress Ctrl+C to stop');
 }
