@@ -4,12 +4,11 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { authenticateLinear } from '@sniff-dev/core';
 
+const DEFAULT_SERVER_URL = 'https://api.sniff.to';
+
 function getDefaultRedirectUri(): string {
-  const serverUrl = process.env.SNIFF_SERVER_URL;
-  if (serverUrl) {
-    return `${serverUrl.replace(/\/$/, '')}/auth/linear/callback`;
-  }
-  return 'http://localhost:3000/auth/linear/callback';
+  const serverUrl = process.env.SNIFF_SERVER_URL || DEFAULT_SERVER_URL;
+  return `${serverUrl.replace(/\/$/, '')}/auth/linear/callback`;
 }
 
 export const auth = new Command('auth').description('Authenticate with Linear').addCommand(

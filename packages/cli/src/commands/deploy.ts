@@ -4,11 +4,13 @@ import { existsSync, readFileSync } from 'fs';
 import chalk from 'chalk';
 import { loadConfig } from '@sniff-dev/config';
 
+const DEFAULT_SERVER_URL = 'https://api.sniff.to';
+
 export const deploy = new Command('deploy')
   .description('Deploy agents to a remote Sniff server')
   .option('-c, --config <path>', 'Path to config file', 'sniff.yml')
-  .option('-s, --server <url>', 'Server URL (or set SNIFF_SERVER_URL)')
-  .action(async (options: { config: string; server?: string }) => {
+  .option('-s, --server <url>', 'Server URL', DEFAULT_SERVER_URL)
+  .action(async (options: { config: string; server: string }) => {
     const configPath = options.config;
 
     // Check if config exists
@@ -26,13 +28,8 @@ export const deploy = new Command('deploy')
       process.exit(1);
     }
 
-    // Get server URL
-    const serverUrl = options.server || process.env.SNIFF_SERVER_URL;
-    if (!serverUrl) {
-      console.error(chalk.red('No server URL provided.'));
-      console.error(chalk.gray('Set SNIFF_SERVER_URL or use --server flag'));
-      process.exit(1);
-    }
+    // Get server URL (CLI option > env var > default)
+    const serverUrl = process.env.SNIFF_SERVER_URL || options.server;
 
     // Get API key if set
     const apiKey = process.env.SNIFF_API_KEY;
