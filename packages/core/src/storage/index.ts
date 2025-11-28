@@ -4,9 +4,6 @@
 
 import { getPool, initDatabase } from './db.js';
 
-// Fixed UUID for Linear OAuth tokens (single-tenant)
-const LINEAR_TOKEN_ID = '00000000-0000-0000-0000-000000000001';
-
 /**
  * OAuth2 token data
  */
@@ -29,13 +26,19 @@ export interface TokenStorage {
  * PostgreSQL-backed token storage
  */
 export class PostgresTokenStorage implements TokenStorage {
-  private id: string;
+  private id: string | undefined;
 
-  constructor(id: string = LINEAR_TOKEN_ID) {
+  constructor(id?: string) {
     this.id = id;
   }
 
+  getId(): string | undefined {
+    return this.id;
+  }
+
   async get(): Promise<OAuth2Tokens | null> {
+    if (!this.id) return null;
+
     await initDatabase();
     const client = await getPool().connect();
     try {
@@ -61,28 +64,44 @@ export class PostgresTokenStorage implements TokenStorage {
     await initDatabase();
     const client = await getPool().connect();
     try {
-      await client.query(
-        `
-        INSERT INTO tokens (id, access_token, refresh_token, expires_at, updated_at)
-        VALUES ($1, $2, $3, $4, NOW())
-        ON CONFLICT (id) DO UPDATE SET
-          access_token = EXCLUDED.access_token,
-          refresh_token = EXCLUDED.refresh_token,
-          expires_at = EXCLUDED.expires_at,
-          updated_at = NOW()
-        `,
-        [this.id, tokens.accessToken, tokens.refreshToken || null, tokens.expiresAt || null],
-      );
+      if (this.id) {
+        // Update existing token
+        await client.query(
+          `
+          UPDATE tokens SET
+            access_token = $2,
+            refresh_token = $3,
+            expires_at = $4,
+            updated_at = NOW()
+          WHERE id = $1
+          `,
+          [this.id, tokens.accessToken, tokens.refreshToken || null, tokens.expiresAt || null],
+        );
+      } else {
+        // Insert new token with generated UUID
+        const result = await client.query(
+          `
+          INSERT INTO tokens (access_token, refresh_token, expires_at, updated_at)
+          VALUES ($1, $2, $3, NOW())
+          RETURNING id
+          `,
+          [tokens.accessToken, tokens.refreshToken || null, tokens.expiresAt || null],
+        );
+        this.id = result.rows[0].id;
+      }
     } finally {
       client.release();
     }
   }
 
   async clear(): Promise<void> {
+    if (!this.id) return;
+
     await initDatabase();
     const client = await getPool().connect();
     try {
       await client.query('DELETE FROM tokens WHERE id = $1', [this.id]);
+      this.id = undefined;
     } finally {
       client.release();
     }
