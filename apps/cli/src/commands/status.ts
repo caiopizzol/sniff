@@ -30,7 +30,7 @@ export const statusCommand = new Command('status')
     // Check authentication
     console.log('Authentication:')
     const hasLinear = await tokenStorage.has('linear')
-    console.log(`  Linear: ${hasLinear ? '✓ Authenticated' : '✗ Not authenticated'}`)
+    console.log(`  Linear: ${hasLinear ? '[OK] Authenticated' : '[X] Not authenticated'}`)
 
     console.log('')
 
@@ -41,9 +41,9 @@ export const statusCommand = new Command('status')
         signal: AbortSignal.timeout(1000),
       })
       if (response.ok) {
-        console.log(`  Status: ✓ Running on port ${env.port}`)
+        console.log(`  Status: [OK] Running on port ${env.port}`)
       } else {
-        console.log('  Status: ✗ Not running')
+        console.log('  Status: [X] Not running')
       }
     } catch {
       console.log('  Status: ✗ Not running')
@@ -54,9 +54,9 @@ export const statusCommand = new Command('status')
     console.log('Configuration:')
     const configFile = Bun.file('sniff.yml')
     if (await configFile.exists()) {
-      console.log('  sniff.yml: ✓ Found')
+      console.log('  sniff.yml: [OK] Found')
     } else {
-      console.log('  sniff.yml: ✗ Not found')
+      console.log('  sniff.yml: [X] Not found')
       console.log('  Run: sniff init')
     }
   })
