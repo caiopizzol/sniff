@@ -5,6 +5,8 @@
  * See: https://linear.app/developers/agent-interaction
  */
 
+import { logger } from '@sniff/core'
+
 /**
  * Issue data from agent session
  */
@@ -154,7 +156,7 @@ export function parseAgentSessionEvent(payload: unknown): AgentSessionEvent | nu
   const signal = agentActivity?.signal
   const promptBody = agentActivity?.content?.body
 
-  return {
+  const event: AgentSessionEvent = {
     sessionId: agentSession.id,
     action: action as 'created' | 'prompted',
     issue: agentSession.issue,
@@ -165,6 +167,20 @@ export function parseAgentSessionEvent(payload: unknown): AgentSessionEvent | nu
     signal,
     promptBody,
   }
+
+  logger.debug('Parsed AgentSessionEvent', {
+    sessionId: event.sessionId,
+    action: event.action,
+    issue: event.issue,
+    comment: event.comment,
+    previousComments: event.previousComments,
+    guidance: event.guidance,
+    promptContext: event.promptContext,
+    signal: event.signal,
+    promptBody: event.promptBody,
+  })
+
+  return event
 }
 
 /**

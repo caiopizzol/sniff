@@ -17,6 +17,8 @@ export interface CoordinatorOptions {
   runner: Runner
   worktreeManager: WorktreeManager
   repositoryPath: string
+  /** Linear OAuth access token for auto-injecting MCP */
+  linearAccessToken?: string
 }
 
 export class Coordinator {
@@ -24,6 +26,7 @@ export class Coordinator {
   private runner: Runner
   private worktreeManager: WorktreeManager
   private repositoryPath: string
+  private linearAccessToken?: string
   /** Track active sessions for stop handling */
   private activeSessions: Map<string, { runner: Runner }> = new Map()
 
@@ -32,6 +35,7 @@ export class Coordinator {
     this.runner = options.runner
     this.worktreeManager = options.worktreeManager
     this.repositoryPath = options.repositoryPath
+    this.linearAccessToken = options.linearAccessToken
   }
 
   /**
@@ -65,13 +69,27 @@ export class Coordinator {
       return null
     }
 
+    // Auto-inject Linear MCP if not configured and we have an access token
+    let mcpServers = options.mcpServers
+    if (this.linearAccessToken && !mcpServers?.linear) {
+      logger.debug('Auto-injecting Linear MCP with OAuth token')
+      mcpServers = {
+        ...mcpServers,
+        linear: {
+          command: 'npx',
+          args: ['-y', '@anthropic-ai/linear-mcp'],
+          env: { LINEAR_API_KEY: this.linearAccessToken },
+        },
+      }
+    }
+
     return {
       workingDirectory,
       systemPrompt: agent.systemPrompt,
       model: options.model,
       allowedTools: options.allowedTools,
       disallowedTools: options.disallowedTools,
-      mcpServers: options.mcpServers,
+      mcpServers,
       permissionMode: options.permissionMode ?? 'acceptEdits',
       maxTurns: options.maxTurns,
       env: options.env,
@@ -132,6 +150,8 @@ export class Coordinator {
       }
 
       const message = buildPromptFromSession(event)
+
+      logger.debug('Prompt sent to agent', { message })
 
       // 5. Run the agent with progress callback
       await client.sendThought(sessionId, 'Working on the task...')
@@ -252,6 +272,8 @@ export class Coordinator {
 
       // Build message from issue
       const message = this.buildMessage(event)
+
+      logger.debug('Prompt sent to agent', { message })
 
       // Run the agent
       runEvent.status = 'running'

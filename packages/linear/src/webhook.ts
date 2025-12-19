@@ -3,6 +3,7 @@
  */
 
 import { createHmac } from 'node:crypto'
+import { logger } from '@sniff/core'
 import type { LinearWebhookEvent } from '@sniff/core'
 
 export interface LinearWebhookPayload {
@@ -51,7 +52,7 @@ export function parseWebhook(payload: LinearWebhookPayload): LinearWebhookEvent 
 
   const { data } = payload
 
-  return {
+  const event: LinearWebhookEvent = {
     type: 'linear',
     action: payload.action,
     payload,
@@ -68,5 +69,12 @@ export function parseWebhook(payload: LinearWebhookPayload): LinearWebhookEvent 
       projectId: data.projectId,
     },
   }
+
+  logger.debug('Parsed LinearWebhookEvent', {
+    action: event.action,
+    data: event.data,
+  })
+
+  return event
 }
 
