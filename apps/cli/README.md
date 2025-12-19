@@ -1,4 +1,4 @@
-# @sniff/cli
+# @sniff-dev/cli
 
 CLI for running local-first AI agents that integrate with Linear.
 

@@ -16,8 +16,8 @@
   },
   "homepage": "https://github.com/caiopizzol/sniff#readme",
   "scripts": {
-    "dev:cli": "bun run --filter @sniff/cli dev",
-    "dev:proxy": "bun run --filter @sniff/proxy dev",
+    "dev:cli": "bun run --filter @sniff-dev/cli dev",
+    "dev:proxy": "bun run --filter @sniff-dev/proxy dev",
     "build": "bun run --filter '*' build",
     "test": "bun test",
     "lint": "bunx @biomejs/biome check .",

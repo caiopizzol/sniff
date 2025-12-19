@@ -1,4 +1,4 @@
-# @sniff/proxy
+# @sniff-dev/proxy
 
 Cloudflare Worker that bridges Linear and local Sniff agents. Handles webhook forwarding and OAuth authentication.
 

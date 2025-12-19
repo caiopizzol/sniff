@@ -2,7 +2,7 @@
 
 /**
  * Sniff CLI - Local-first AI agents for Linear
- * @module @sniff/cli
+ * @module @sniff-dev/cli
  */
 
 import { Command } from 'commander'

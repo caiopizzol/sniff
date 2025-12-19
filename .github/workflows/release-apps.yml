@@ -36,7 +36,7 @@ jobs:
       - name: Build CLI
         run: bun run --cwd apps/cli build
 
-      - name: Release @sniff/cli
+      - name: Release @sniff-dev/cli
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -45,7 +45,7 @@ jobs:
         working-directory: apps/cli
         run: npx semantic-release
 
-      - name: Release @sniff/proxy
+      - name: Release @sniff-dev/proxy
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
