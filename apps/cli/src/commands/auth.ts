@@ -89,61 +89,15 @@ export const authCommand = new Command('auth')
     }
 
     console.log('Waiting for authentication...')
-    console.log('')
-    console.log('If the automatic callback fails, copy the token from the browser')
-    console.log('and paste it below when prompted.')
-    console.log('')
-
-    // Race between automatic callback and manual input timeout
-    const manualInputTimeout = 30 * 1000 // 30 seconds before prompting for manual input
 
     try {
-      // Wait for automatic callback with a shorter timeout
-      const tokens = await Promise.race([
-        tokensPromise,
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), manualInputTimeout)),
-      ])
-
-      if (tokens) {
-        // Automatic callback succeeded
-        await storeTokens(tokens)
-        console.log('')
-        console.log('✓ Successfully authenticated with Linear!')
-      } else {
-        // Automatic callback timed out, prompt for manual input
-        console.log('')
-        console.log('Automatic callback did not complete.')
-        console.log('Please copy the access token from the browser and paste it below:')
-        console.log('')
-
-        const readline = await import('node:readline')
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout,
-        })
-
-        const manualToken = await new Promise<string>((resolve) => {
-          rl.question('Access Token: ', (answer) => {
-            rl.close()
-            resolve(answer.trim())
-          })
-        })
-
-        if (!manualToken) {
-          console.error('No token provided')
-          process.exit(1)
-        }
-
-        await tokenStorage.set('linear', {
-          accessToken: manualToken,
-        })
-
-        console.log('')
-        console.log('✓ Successfully authenticated with Linear!')
-      }
+      const tokens = await tokensPromise
+      await storeTokens(tokens)
+      console.log('')
+      console.log('[OK] Successfully authenticated with Linear!')
     } catch (error) {
       console.error('')
-      console.error('✗ Authentication failed:', error instanceof Error ? error.message : error)
+      console.error('[X] Authentication failed:', error instanceof Error ? error.message : error)
       server.stop()
       process.exit(1)
     }
