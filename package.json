@@ -29,6 +29,7 @@
     "@biomejs/biome": "^2.3.10",
     "@types/bun": "latest",
     "semantic-release": "^24.2.5",
+    "@semantic-release/exec": "^7.0.3",
     "@semantic-release/git": "^10.0.1",
     "@semantic-release/github": "^11.0.3",
     "typescript": "^5.9.3"
