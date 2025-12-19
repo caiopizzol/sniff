@@ -48,12 +48,19 @@ export const startCommand = new Command('start')
       process.exit(1)
     }
 
+    // Track if using local tokens (for saving refreshed tokens to correct location)
+    const isLocalToken = await tokenStorage.hasLocal('linear')
+
     // Refresh token if expired or expiring soon
     if (needsRefresh(tokens)) {
       try {
         logger.info('Refreshing expired Linear token...')
         tokens = await refreshLinearTokens(tokens, env.proxyUrl)
-        await tokenStorage.set('linear', tokens)
+        if (isLocalToken) {
+          await tokenStorage.setLocal('linear', tokens)
+        } else {
+          await tokenStorage.set('linear', tokens)
+        }
         logger.info('Token refreshed successfully')
       } catch (error) {
         logger.warn('Token refresh failed, continuing with existing token', {
