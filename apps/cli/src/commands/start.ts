@@ -6,8 +6,10 @@ import { loadConfig } from '@sniff/config'
 import { getEnvConfig, logger, setLogLevel } from '@sniff/core'
 import {
   LinearClient,
+  needsRefresh,
   parseAgentSessionEvent,
   parseWebhook,
+  refreshLinearTokens,
   verifyWebhookSignature,
 } from '@sniff/linear'
 import { Coordinator, LocalServer, WorktreeManager } from '@sniff/orchestrator'
@@ -40,10 +42,24 @@ export const startCommand = new Command('start')
     }
 
     // Check authentication
-    const tokens = await tokenStorage.get('linear')
+    let tokens = await tokenStorage.get('linear')
     if (!tokens) {
       console.error('Not authenticated with Linear. Run: sniff auth linear')
       process.exit(1)
+    }
+
+    // Refresh token if expired or expiring soon
+    if (needsRefresh(tokens)) {
+      try {
+        logger.info('Refreshing expired Linear token...')
+        tokens = await refreshLinearTokens(tokens, env.proxyUrl)
+        await tokenStorage.set('linear', tokens)
+        logger.info('Token refreshed successfully')
+      } catch (error) {
+        logger.warn('Token refresh failed, continuing with existing token', {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
     }
 
     // Create Linear client
@@ -57,6 +73,7 @@ export const startCommand = new Command('start')
       runner,
       worktreeManager,
       repositoryPath: process.cwd(),
+      linearAccessToken: tokens.accessToken,
     })
 
     const port = options.port ? parseInt(options.port, 10) : env.port
@@ -77,6 +94,8 @@ export const startCommand = new Command('start')
           }
 
           const payload = JSON.parse(body)
+
+          logger.debug('Raw webhook payload', { payload: JSON.stringify(payload, null, 2) })
 
           logger.info('Webhook received', {
             type: payload.type,

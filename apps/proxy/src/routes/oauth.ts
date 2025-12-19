@@ -160,3 +160,50 @@ export async function handleOAuthCallback(request: Request, env: Env): Promise<R
     return new Response(`OAuth error: ${error}`, { status: 500 })
   }
 }
+
+/**
+ * Handle token refresh
+ */
+export async function handleTokenRefresh(request: Request, env: Env): Promise<Response> {
+  try {
+    const body = await request.json()
+    const refreshToken = body?.refreshToken
+
+    if (!refreshToken) {
+      return new Response(JSON.stringify({ error: 'Missing refresh token' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    const tokenResponse = await fetch(LINEAR_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: env.LINEAR_CLIENT_ID,
+        client_secret: env.LINEAR_CLIENT_SECRET,
+        refresh_token: refreshToken,
+      }),
+    })
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text()
+      return new Response(JSON.stringify({ error: `Token refresh failed: ${errorText}` }), {
+        status: tokenResponse.status,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    const tokens = await tokenResponse.json()
+    return new Response(JSON.stringify(tokens), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  } catch (error) {
+    return new Response(JSON.stringify({ error: String(error) }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+}

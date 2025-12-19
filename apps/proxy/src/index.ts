@@ -7,7 +7,7 @@
  * 2. Handles OAuth callbacks and redirects to local
  */
 
-import { handleOAuth, handleOAuthCallback } from './routes/oauth'
+import { handleOAuth, handleOAuthCallback, handleTokenRefresh } from './routes/oauth'
 import { handleWebhook } from './routes/webhook'
 
 export interface Env {
@@ -48,6 +48,11 @@ export default {
     // OAuth callback
     if (url.pathname === '/auth/linear/callback' && request.method === 'GET') {
       return handleOAuthCallback(request, env)
+    }
+
+    // Token refresh
+    if (url.pathname === '/auth/linear/refresh' && request.method === 'POST') {
+      return handleTokenRefresh(request, env)
     }
 
     // Health check
