@@ -1,5 +1,6 @@
 /**
  * Sniff Proxy Worker
+ * @module @sniff/proxy
  *
  * Cloudflare Worker that:
  * 1. Receives Linear webhooks and forwards them to the local agent
