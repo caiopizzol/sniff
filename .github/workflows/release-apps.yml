@@ -34,21 +34,21 @@ jobs:
         run: bun install
 
       - name: Build CLI
-        run: bun run --filter @sniff/cli build
+        run: bun run --cwd apps/cli build
 
       - name: Release @sniff/cli
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: bun run --filter @sniff/cli exec semantic-release
+        run: bunx --cwd apps/cli semantic-release
 
       - name: Release @sniff/proxy
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: bun run --filter @sniff/proxy exec semantic-release
+        run: bunx --cwd apps/proxy semantic-release
 
       # Sync stable back to main after stable release
       - name: Sync stable to main
