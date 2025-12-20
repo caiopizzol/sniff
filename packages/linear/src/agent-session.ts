@@ -191,9 +191,8 @@ export function buildPromptFromSession(event: AgentSessionEvent): string {
 
   let message = `Issue: ${issue.identifier} - ${issue.title}\n\n`
 
-  if (issue.description) {
-    message += `Description:\n${issue.description}\n\n`
-  }
+  // Note: We skip issue.description here because promptContext already contains
+  // the full issue details in structured XML format from Linear
 
   if (comment?.body) {
     // Extract the actual user message (remove @mention)
@@ -205,7 +204,7 @@ export function buildPromptFromSession(event: AgentSessionEvent): string {
 
   // Include prompt context if available (contains thread history)
   if (promptContext) {
-    message += `Context:\n${promptContext}\n`
+    message += `Context:\n${promptContext}\n\n`
   }
 
   return message

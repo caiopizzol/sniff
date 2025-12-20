@@ -9,6 +9,8 @@ import {
   type AgentSessionEvent,
   type LinearClient,
   buildPromptFromSession,
+  formatAttachmentsForPrompt,
+  prefetchLinearAttachments,
 } from '@sniff/linear'
 import type { WorktreeManager } from './worktree'
 
@@ -149,11 +151,28 @@ export class Coordinator {
         return
       }
 
-      const message = buildPromptFromSession(event)
+      // 5. Pre-fetch Linear attachments if we have an access token
+      let attachmentsContext = ''
+      if (this.linearAccessToken) {
+        try {
+          const attachments = await prefetchLinearAttachments(
+            event,
+            this.linearAccessToken,
+            worktreePath,
+          )
+          attachmentsContext = formatAttachmentsForPrompt(attachments)
+        } catch (error) {
+          logger.warn('Failed to pre-fetch attachments', {
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+
+      const message = buildPromptFromSession(event) + attachmentsContext
 
       logger.debug('Prompt sent to agent', { message })
 
-      // 5. Run the agent with progress callback
+      // 6. Run the agent with progress callback
       await client.sendThought(sessionId, 'Working on the task...')
 
       // Track session for stop handling
@@ -204,7 +223,7 @@ export class Coordinator {
           }
         })
 
-        // 6. Send final response or error
+        // 7. Send final response or error
         if (result.success) {
           const response = result.output || 'Task completed successfully.'
           await client.sendResponse(sessionId, response)
