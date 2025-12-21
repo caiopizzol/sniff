@@ -109,7 +109,7 @@ export const authCommand = new Command('auth')
     } catch (error) {
       console.error('')
       if (error instanceof Error && error.message === 'timeout') {
-        console.error('[X] Authentication timed out. Please try again.')
+        console.error('[X] Lost the trail. Please try again.')
       } else {
         console.error('[X] Authentication failed:', error instanceof Error ? error.message : error)
       }

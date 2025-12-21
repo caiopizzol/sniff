@@ -122,7 +122,7 @@ export class Coordinator {
 
     try {
       // 1. Send immediate thought activity (must be within 10s)
-      await client.sendThought(sessionId, 'Analyzing the issue...')
+      await client.sendThought(sessionId, 'Sniffing out the issue...')
 
       // 2. Get the first agent from config (for now, use first available)
       const agent = this.config.agents[0]
@@ -134,7 +134,7 @@ export class Coordinator {
       // 3. Create worktree for isolated execution
       let worktreePath: string
       try {
-        await client.sendAction(sessionId, 'Creating', 'isolated workspace')
+        await client.sendAction(sessionId, 'Preparing', 'the hunting grounds')
         worktreePath = await this.worktreeManager.create(issue.identifier, this.repositoryPath)
       } catch (error) {
         // If worktree creation fails, run in main repo
@@ -173,7 +173,7 @@ export class Coordinator {
       logger.debug('Prompt sent to agent', { message })
 
       // 6. Run the agent with progress callback
-      await client.sendThought(sessionId, 'Working on the task...')
+      await client.sendThought(sessionId, 'Following the trail...')
 
       // Track session for stop handling
       this.activeSessions.set(sessionId, { runner: this.runner })
@@ -204,7 +204,7 @@ export class Coordinator {
               })
             } else {
               // All other tools (Read, Glob, Grep, Bash) → just "Thinking..."
-              await client.sendEphemeralThought(sessionId, 'Thinking...').catch((err) => {
+              await client.sendEphemeralThought(sessionId, 'Nose to the ground...').catch((err) => {
                 logger.warn('Failed to send ephemeral thought', { error: err })
               })
             }
@@ -217,7 +217,7 @@ export class Coordinator {
             }
           } else if (progress.type === 'thinking') {
             // Extended thinking → ephemeral (internal)
-            await client.sendEphemeralThought(sessionId, 'Thinking...').catch((err) => {
+            await client.sendEphemeralThought(sessionId, 'Nose to the ground...').catch((err) => {
               logger.warn('Failed to send ephemeral thought', { error: err })
             })
           }
@@ -225,7 +225,7 @@ export class Coordinator {
 
         // 7. Send final response or error
         if (result.success) {
-          const response = result.output || 'Task completed successfully.'
+          const response = result.output || 'Tracked it down.'
           await client.sendResponse(sessionId, response)
         } else {
           await client.sendError(sessionId, result.error || 'Unknown error occurred')

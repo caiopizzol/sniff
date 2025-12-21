@@ -48,12 +48,12 @@ export const statusCommand = new Command('status')
         signal: AbortSignal.timeout(1000),
       })
       if (response.ok) {
-        console.log(`  Status: [OK] Running on port ${env.port}`)
+        console.log(`  Status: [OK] Sniffing on port ${env.port}`)
       } else {
-        console.log('  Status: [X] Not running')
+        console.log('  Status: [X] Trail gone cold')
       }
     } catch {
-      console.log('  Status: [X] Not running')
+      console.log('  Status: [X] Trail gone cold')
     }
 
     // Check sniff.yml

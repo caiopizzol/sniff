@@ -166,7 +166,7 @@ export const startCommand = new Command('start')
     console.log('Start your tunnel manually (e.g., ngrok http ' + port + ')')
     console.log('Then set TUNNEL_URL in apps/proxy/.env')
     console.log('')
-    console.log('Waiting for webhooks...')
+    console.log('Sniffing for webhooks...')
     console.log('Press Ctrl+C to stop')
 
     // Handle shutdown
