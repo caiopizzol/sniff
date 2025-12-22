@@ -1,5 +1,5 @@
 {
-  "name": "sniff-docs",
+  "name": "@sniff-dev/docs",
   "version": "1.0.0",
   "private": true,
   "description": "Sniff documentation",
@@ -10,9 +10,6 @@
     "a11y": "mint a11y"
   },
   "devDependencies": {
-    "mint": "^4.2.201"
-  },
-  "engines": {
-    "node": ">=19"
+    "mint": "^4.2.249"
   }
 }
