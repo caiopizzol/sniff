@@ -5,139 +5,239 @@ description: Understanding the Sniff agent lifecycle
 
 # How It Works
 
-Sniff connects Linear to Claude through webhooks. When something happens in Linear, your agent analyzes it and responds.
+Sniff connects Linear to Claude Agent SDK through a proxy and webhook system. When something happens in Linear, your agent analyzes it and responds with full access to your codebase.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  Linear[Linear<br/>Webhook] --> Sniff[Sniff Server<br/>Your Host]
-  Sniff --> Anthropic[Anthropic<br/>Claude API]
-  Sniff --> MCP[MCP Servers<br/>Optional]
+  Linear[Linear] -->|Webhook| Proxy[Cloudflare<br/>Worker Proxy]
+  Proxy -->|Forward| Tunnel[Tunnel<br/>ngrok/cloudflared]
+  Tunnel -->|HTTP| CLI[Sniff CLI<br/>Your Machine]
+  CLI -->|Run| SDK[Claude<br/>Agent SDK]
+  SDK -->|Comment| Linear
 ```
+
+### Components
+
+| Component            | Role                                                             |
+| -------------------- | ---------------------------------------------------------------- |
+| **Linear**           | Sends webhooks when agent assigned or mentioned                  |
+| **Proxy**            | Cloudflare Worker that handles OAuth and forwards webhooks       |
+| **Tunnel**           | ngrok or cloudflared that exposes your local CLI to the internet |
+| **Sniff CLI**        | Local server that receives webhooks and runs agents              |
+| **Claude Agent SDK** | Executes agents with tools (Read, Write, Edit, Bash, etc.)       |
+
+## OAuth Flow
+
+Authentication happens via OAuth through your proxy:
+
+```mermaid
+sequenceDiagram
+  participant CLI as Sniff CLI
+  participant Browser
+  participant Proxy as Cloudflare Proxy
+  participant Linear
+
+  CLI->>Browser: Open OAuth URL
+  Browser->>Proxy: /auth/linear
+  Proxy->>Linear: Redirect to OAuth
+  Linear->>Browser: Authorization prompt
+  Browser->>Linear: User authorizes
+  Linear->>Proxy: Auth code
+  Proxy->>Linear: Exchange for tokens
+  Proxy->>Browser: HTML with tokens
+  Browser->>CLI: POST tokens to localhost
+  CLI->>CLI: Store tokens locally
+```
+
+Tokens are stored in `~/.sniff/tokens/` and automatically refreshed when expired.
+
+## Agent Triggering
+
+Agents can be triggered in several ways:
+
+### 1. Issue Delegation
+
+Assign an issue to the Sniff application via Linear's assignment feature. The agent starts working immediately.
+
+### 2. @Mention in Comments
+
+Users can @mention the agent in any issue comment to trigger it directly.
+
+### 3. Label or Team Filtering
+
+Optionally restrict which issues an agent handles using `label` and/or `team`:
+
+```yaml
+agents:
+  - id: engineer
+    label: agent # Only issues with this label
+    team: TEAM_ID # Only issues in this team
+```
+
+Both fields are optional. If omitted, the agent responds to any delegation or @mention.
 
 ## The Agent Lifecycle
 
-### 1. Event Received
+### 1. Webhook Received
 
-When an issue is created or updated in Linear, a webhook is sent to your Sniff server:
+Linear sends a webhook to your proxy when an issue matches trigger criteria:
 
 ```json
 {
-  "action": "create",
-  "type": "Issue",
-  "data": {
+  "type": "AgentSessionEvent",
+  "action": "created",
+  "createdAt": "2025-11-01T00:00:00.000Z",
+  "agentSession": {
     "id": "abc-123",
-    "title": "Login button not working",
-    "description": "Users report the login button is unresponsive..."
+    "issue": {
+      "title": "Fix login button",
+      "description": "The login button is unresponsive...",
+      "labels": [{ "name": "agent" }]
+    }
   }
 }
 ```
 
-### 2. Agent Selected
+### 2. Webhook Forwarded
 
-Sniff matches the event to your configured agent(s). The agent's system prompt defines how it should respond.
+The proxy verifies the signature (if configured) and forwards to your local CLI via the tunnel.
 
-### 3. Claude Processes
+### 3. Agent Selected
 
-The issue context is sent to Claude along with your system prompt:
+The CLI matches the event to your configured agent(s) by:
+
+- Checking if the issue was delegated to the agent
+- Checking if the agent was @mentioned
+- Filtering by `label` and `team` if configured
+
+### 4. Worktree Created
+
+If `SNIFF_WORKTREE_ENABLED=true` (default), a git worktree is created for isolated execution:
 
 ```
-System: You are a triage specialist...
-
-User: New issue created:
-Title: Login button not working
-Description: Users report the login button is unresponsive...
+.git/worktrees/sniff-abc-123/
 ```
 
-### 4. Tools Execute (Optional)
+This prevents agents from interfering with each other or your working directory.
 
-If your agent has tools configured, Claude can:
+### 5. Agent Executes
 
-- **Search the web** for documentation or error codes
-- **Fetch web pages** for detailed content
-- **Call MCP servers** for external integrations
+Claude Agent SDK runs with your configuration:
 
-### 5. Response Posted
+- System prompt from `systemPrompt`
+- Tools from `allowedTools`
+- MCP servers from `mcpServers`
+- Limits from `maxTurns`, `maxBudgetUsd`
 
-Claude's response is posted as a comment on the Linear issue:
+The agent can:
 
-![Agent Response](/images/linear5.png)
+- **Read files** - Understand your codebase
+- **Write/Edit files** - Make changes
+- **Run commands** - Execute builds, tests, git operations
+- **Search code** - Find relevant files and patterns
+- **Spawn sub-agents** - Delegate complex tasks
 
-```markdown
-### Triage Analysis
+### 6. Progress Updates
 
-**Type:** Bug
-**Priority:** P1 (High)
+As the agent works, progress is streamed to Linear as comment updates:
 
-**Reasoning:**
-This affects core authentication functionality. Users cannot
-access the application, making this a high-priority issue.
+| Update Type   | Description                                |
+| ------------- | ------------------------------------------ |
+| **Thought**   | Agent's reasoning and plans                |
+| **Action**    | Significant operations (Edit, Write, Task) |
+| **Ephemeral** | Routine exploration (Read, Glob, Grep)     |
 
-**Suggested Labels:**
+### 7. Response Posted
 
-- `bug`
-- `auth`
-- `frontend`
+The final result is posted as a Linear comment with the agent's work summary.
 
-**Next Steps:**
-
-1. Assign to frontend team
-2. Check recent auth-related changes
-```
-
-## Interacting with Agents
-
-### @Mention
-
-Users can @mention Sniff in any issue to trigger analysis:
-
-![Mention Sniff](/images/linear2.png)
-
-### Assign to Sniff
-
-Assign an issue directly to Sniff for automatic handling:
-
-![Assign to Sniff](/images/linear3.png)
-
-## What Sniff Can Access
+## What Agents Can Access
 
 When processing an issue, your agent receives:
 
-- **Issue title and description**
-- **Labels and priority**
-- **Assignee and creator info**
-- **Team and project context**
-- **Recent comments**
+- **Issue context** - Title, description, labels, priority
+- **Assignee and creator** - Who created and is assigned to the issue
+- **Team and project** - Organizational context
+- **Recent comments** - Discussion history
+- **Attachments** - Links and files attached to the issue
 
-## Stateless Design
+Plus full access to your codebase via Claude Agent SDK tools.
 
-Sniff is stateless by design:
+## Git Worktree Isolation
 
-- **No database** - Configuration comes from `sniff.yml`
-- **No session storage** - Each webhook is processed independently
-- **Credentials from env vars** - `LINEAR_ACCESS_TOKEN`, `ANTHROPIC_API_KEY`
+Each agent run gets an isolated git worktree:
 
-This makes deployment simple and scaling straightforward.
+```
+main branch (your work)
+├── .git/worktrees/
+│   ├── sniff-issue-123/  ← Agent's isolated environment
+│   └── sniff-issue-456/  ← Another agent's environment
+```
+
+Benefits:
+
+- Agents don't interfere with your working directory
+- Multiple agents can run in parallel
+- Failed runs don't leave your repo dirty
+- Easy cleanup after agent completes
+
+Disable with `SNIFF_WORKTREE_ENABLED=false` if needed.
 
 ## Multiple Agents
 
-You can define multiple agents in your configuration:
+Define multiple agents with different triggers and capabilities:
 
 ```yaml
-version: '1.0'
+version: "2.0"
 
 agents:
-  - id: 'triage-bot'
-    name: 'Triage Assistant'
-    # ...
+  - id: engineer
+    label: agent
+    systemPrompt: |
+      You are a software engineer...
+    runner:
+      claude:
+        allowedTools: [Read, Write, Edit, Bash]
+        permissionMode: acceptEdits
 
-  - id: 'docs-bot'
-    name: 'Documentation Helper'
-    # ...
+  - id: reviewer
+    label: review
+    systemPrompt: |
+      You are a code reviewer...
+    runner:
+      claude:
+        allowedTools: [Read, Glob, Grep]
+        permissionMode: default
 ```
 
-Each agent has its own system prompt and model configuration.
+Each agent has its own:
+
+- Trigger label
+- System prompt
+- Tool permissions
+- Execution limits
+
+## Proxy Architecture
+
+The Cloudflare Worker proxy handles:
+
+### OAuth Endpoints
+
+- `GET /auth/linear` - Start OAuth flow
+- `GET /auth/linear/callback` - Receive OAuth code, exchange for tokens
+- `POST /auth/linear/refresh` - Refresh expired tokens
+
+### Webhook Forwarding
+
+- `POST /webhook/linear` - Receive Linear webhook, forward to tunnel URL
+
+### Health Check
+
+- `GET /` or `GET /health` - Returns "OK"
+
+The proxy is stateless - it stores no data. Secrets (OAuth credentials, tunnel URL) are stored in Cloudflare.
 
 ## Next Steps
 

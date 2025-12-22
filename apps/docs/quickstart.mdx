@@ -1,113 +1,169 @@
 ---
 title: Quickstart
-description: Deploy your first AI agent in 5 minutes
+description: Deploy your first AI agent in 10 minutes
 ---
 
 # Quickstart
 
-Get your first AI agent running with Docker in under 5 minutes.
+Get your first AI agent running with the Sniff CLI and a local proxy.
 
 ## Prerequisites
 
-- Docker and Docker Compose
-- A Linear workspace (admin access for webhooks)
-- An Anthropic API key
+- [Bun](https://bun.sh) runtime
+- [ngrok](https://ngrok.com) or similar tunnel tool
+- A Linear workspace (admin access for OAuth app)
 
-## Step 1: Clone and Configure
+## Step 1: Clone and Install
 
 ```bash
-# Clone the repository
-git clone https://github.com/caiopizzol/sniff.git
+git clone https://github.com/sniff-dev/sniff.git
 cd sniff
-
-# Create environment file
-cp .env.example .env
+bun install
 ```
 
-Edit `.env` with your credentials:
+## Step 2: Create Linear OAuth App
+
+1. Go to [Linear Settings → OAuth applications](https://linear.app/settings/api/applications)
+2. Click **New OAuth Application**
+3. Fill in:
+   - **Application name**: Sniff Agent
+   - **Redirect URI**: `http://localhost:8787/auth/linear/callback` (we'll update this later)
+4. Under **Actor**, select **Application** (required for agent features)
+5. Click **Create**
+6. Copy the **Client ID** and **Client Secret**
+
+## Step 3: Configure Environment
+
+Copy and paste `.env.example` in a new `.env` file in the proxy directory:
 
 ```bash
-# .env
-LINEAR_ACCESS_TOKEN=lin_api_xxxxx
-ANTHROPIC_API_KEY=sk-ant-xxxxx
+cd apps/proxy && cp .env.example .env
 ```
-
-<Note>
-  Get your Linear API token from [Linear Settings →
-  API](https://linear.app/settings/api). Get your Anthropic API key from
-  [Anthropic Console](https://console.anthropic.com).
-</Note>
-
-## Step 2: Create Agent Configuration
-
-Create a `sniff.yml` file (or use the default):
-
-```yaml
-version: "1.0"
-
-agents:
-  - id: "triage-bot"
-    name: "Triage Assistant"
-    description: "Classifies and prioritizes incoming issues"
-
-    system_prompt: |
-      You are a triage specialist for an engineering team.
-
-      When a new issue is created:
-      1. Classify as: bug, feature, question, or task
-      2. Set priority: P0 (critical), P1 (high), P2 (medium), P3 (low)
-      3. Suggest relevant labels
-      4. Provide brief reasoning
-
-      Be concise and decisive.
-
-    model:
-      anthropic:
-        name: "claude-sonnet-4-20250514"
-        temperature: 0.3
-        max_tokens: 1500
-```
-
-## Step 3: Start the Server
 
 ```bash
-docker compose up
+# apps/proxy/.env
+LINEAR_CLIENT_ID=your_client_id
+LINEAR_CLIENT_SECRET=your_client_secret
+TUNNEL_URL=http://localhost:3847
+```
+
+## Step 4: Start a Tunnel
+
+Open a new terminal and start a tunnel to expose the proxy:
+
+```bash
+ngrok http 8787
+```
+
+Copy the public URL (e.g., `https://abc123.ngrok.io`).
+
+Now update your Linear OAuth app's **Redirect URI** to:
+
+```
+https://abc123.ngrok.io/auth/linear/callback
+```
+
+## Step 5: Configure Linear Webhook
+
+1. Go to **Linear Settings** → **API** → **Webhooks**
+2. Click **New Webhook**
+3. Set the URL to your tunnel: `https://abc123.ngrok.io/webhook/linear`
+4. Select App events: **Agent sessions events**
+5. Click **Create**
+
+## Step 6: Start the Proxy
+
+```bash
+cd apps/proxy
+bun run dev
 ```
 
 You should see:
 
 ```
-sniff  | Loading configuration...
-sniff  | Configuration loaded
-sniff  | Initializing Linear platform...
-sniff  | Linear platform initialized
-sniff  | Server is running!
-sniff  |
-sniff  | Agents:
-sniff  |   - Triage Assistant (triage-bot)
-sniff  |
-sniff  | Webhooks:
-sniff  |   - POST http://localhost:3000/webhook/linear
+Starting local server...
+Ready on http://localhost:8787
 ```
 
-## Step 4: Configure Linear Webhook
+## Step 7: Initialize Agent Configuration
 
-1. Go to **Linear Settings** → **API** → **Webhooks**
-2. Click **New Webhook**
-3. Set the URL to your server: `http://your-server:3000/webhook/linear`
-4. Select events: **Issue** (create, update)
-5. Click **Create**
+Open a new terminal:
 
-<Tip>
-  For local development, use [ngrok](https://ngrok.com) to expose your local
-  server: ```bash ngrok http 3000 ``` Then use the ngrok URL for your webhook.
-</Tip>
+```bash
+cd apps/cli
+sniff init
+```
 
-## Step 5: Test It Out
+Edit the generated `sniff.yml`:
 
-Create an issue in Linear. Your agent will automatically respond with its analysis.
+```yaml
+version: "2.0"
 
-![Sniff in Linear](/images/linear1.png)
+agents:
+  - id: engineer
+    name: Engineer
+    systemPrompt: |
+      You are a software engineer. Help with coding tasks,
+      bug fixes, and code reviews. Write clean, tested code.
+    runner:
+      claude:
+        allowedTools:
+          - Read
+          - Write
+          - Edit
+          - Glob
+          - Grep
+          - Bash
+        permissionMode: acceptEdits
+        maxTurns: 50
+```
+
+## Step 8: Authenticate with Linear
+
+```bash
+export SNIFF_PROXY_URL=https://abc123.ngrok.io
+sniff auth linear
+```
+
+This opens your browser for OAuth. After authorizing, tokens are stored locally.
+
+## Step 9: Start the Agent
+
+```bash
+sniff start
+```
+
+You should see:
+
+```
+Sniff CLI starting...
+Loaded 1 agent(s): Engineer
+Server listening on http://localhost:3847
+```
+
+## Step 10: Test It Out
+
+1. Create a new issue in Linear
+2. Watch your terminal - the agent will process the issue
+3. Check Linear - the agent's response appears as a comment
+
+## Production Deployment
+
+For production, deploy the proxy to Cloudflare Workers:
+
+```bash
+cd apps/proxy
+
+# Set secrets
+npx wrangler secret put LINEAR_CLIENT_ID
+npx wrangler secret put LINEAR_CLIENT_SECRET
+npx wrangler secret put TUNNEL_URL  # Your production tunnel URL
+
+# Deploy
+npx wrangler deploy
+```
+
+Then update your Linear OAuth app and webhook to use the Cloudflare Worker URL.
 
 ## Next Steps
 
@@ -123,24 +179,29 @@ Create an issue in Linear. Your agent will automatically respond with its analys
 ## Troubleshooting
 
 <AccordionGroup>
-  <Accordion title="Server won't start">
-    Check that your environment variables are set:
-    ```bash
-    echo $LINEAR_ACCESS_TOKEN
-    echo $ANTHROPIC_API_KEY
-    ```
-    Both should print values (not empty).
+  <Accordion title="OAuth fails or times out">
+    - Verify the redirect URI in Linear matches your tunnel URL + `/auth/linear/callback`
+    - Check that the proxy is running: `bun run dev`
+    - Ensure ngrok is forwarding to port 8787
   </Accordion>
 
-<Accordion title="Webhook not receiving events">
-  - Verify the webhook URL is accessible from the internet - Check Linear
-  webhook settings show "Active" status - Look at server logs for incoming
-  requests
+{" "}
+
+<Accordion title="Webhook not reaching CLI">
+  - Check the proxy logs for incoming webhook requests - Verify TUNNEL_URL in
+  `.dev.vars` is `http://localhost:3847` - Ensure the CLI is running: `sniff
+  start`
 </Accordion>
 
-  <Accordion title="Agent not responding">
-    - Check server logs for errors
-    - Verify the issue event type is selected in webhook settings
-    - Ensure your Anthropic API key has credits
+{" "}
+
+<Accordion title="Agent not responding to issues">
+  - Verify the issue has the correct label (matches `label` in config) - Check
+  CLI logs for errors - Ensure Linear webhook is pointing to your tunnel URL
+</Accordion>
+
+  <Accordion title="Token refresh errors">
+    - Re-authenticate: `sniff auth linear --force`
+    - Verify LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET are correct in `.dev.vars`
   </Accordion>
 </AccordionGroup>

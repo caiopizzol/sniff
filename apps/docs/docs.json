@@ -26,14 +26,14 @@
       },
       {
         "label": "",
-        "href": "https://github.com/caiopizzol/sniff",
+        "href": "https://github.com/sniff-dev/sniff",
         "icon": "github"
       }
     ],
     "primary": {
       "type": "button",
       "label": "View on GitHub",
-      "href": "https://github.com/caiopizzol/sniff"
+      "href": "https://github.com/sniff-dev/sniff"
     }
   },
   "navigation": {

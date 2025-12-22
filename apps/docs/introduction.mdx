@@ -5,7 +5,7 @@ description: Self-hosted AI agent framework for Linear
 
 # What is Sniff?
 
-Sniff is a self-hosted AI agent framework for Linear. Define your agents in YAML, deploy with Docker, and let AI handle your issue triage, research, and analysis.
+Sniff is a self-hosted AI agent framework for Linear. Define your agents in YAML, deploy a Cloudflare Worker proxy, and let AI handle your issue triage, research, and coding tasks.
 
 Like Docker Compose for AI agents.
 
@@ -13,48 +13,57 @@ Like Docker Compose for AI agents.
 
 - **Self-hosted** - Run on your infrastructure. No vendor lock-in, no data leaving your network
 - **Declarative** - Define agents in YAML. Version control your configuration
-- **Simple** - No database required. Stateless design with config from a single file
-- **Extensible** - Web search, web fetch, and MCP server integrations built-in
+- **Powerful** - Built on Claude Agent SDK with full access to file tools
+- **Extensible** - MCP server integrations, hooks for lifecycle events, sandbox isolation
 
 ## How It Works
 
 ```mermaid
 flowchart LR
-  Linear[Linear<br/>Webhook] --> Sniff[Sniff Server<br/>Your Host]
-  Sniff --> Anthropic[Anthropic<br/>Claude API]
+  Linear[Linear<br/>Webhooks] --> Proxy[Cloudflare<br/>Worker Proxy]
+  Proxy --> Tunnel[Tunnel<br/>ngrok/cloudflared]
+  Tunnel --> CLI[Sniff CLI<br/>Your Machine]
+  CLI --> SDK[Claude<br/>Agent SDK]
 ```
 
-1. **Linear sends webhook** → Issue created or updated
-2. **Sniff processes event** → Matches to your agent configuration
-3. **Agent runs** → Claude analyzes with your system prompt
-4. **Response posted** → Agent reply appears as Linear comment
+1. **Linear sends webhook** → Issue agent assigned or mentioned
+2. **Proxy forwards** → Your Cloudflare Worker forwards to local CLI via tunnel
+3. **Agent runs** → Claude Agent SDK processes with your system prompt and tools
+4. **Response posted** → Agent replies in Linear
 
 ## What Can Agents Do?
 
-With Sniff, you can build agents that:
+With Sniff and Claude Agent SDK, your agents can:
 
+- **Write code** - Create, edit, and refactor files in your codebase
+- **Run commands** - Execute builds, tests, and git operations
+- **Research questions** - Search and analyze code, read documentation
 - **Triage issues** - Classify type, set priority, suggest labels
-- **Research questions** - Search docs and provide answers with citations
-- **Analyze bugs** - Look up error codes, find similar issues
-- **Summarize discussions** - Condense long threads into key points
+- **Analyze bugs** - Read stack traces, find root causes, propose fixes
 
 ## Example Configuration
 
 ```yaml
-version: '1.0'
+version: "2.0"
 
 agents:
-  - id: 'triage-bot'
-    name: 'Triage Assistant'
-    system_prompt: |
-      You are a triage specialist.
-      Classify issues as bug/feature/question/task.
-      Set priority P0-P3.
-    model:
-      anthropic:
-        name: 'claude-sonnet-4-20250514'
-        temperature: 0.3
-        max_tokens: 1500
+  - id: engineer
+    name: Engineer
+    label: agent
+    systemPrompt: |
+      You are a software engineer. Help with coding tasks,
+      bug fixes, and code reviews. Write clean, tested code.
+    runner:
+      claude:
+        allowedTools:
+          - Read
+          - Write
+          - Edit
+          - Glob
+          - Grep
+          - Bash
+        permissionMode: acceptEdits
+        maxTurns: 50
 ```
 
 ## Get Started
@@ -62,5 +71,5 @@ agents:
 Ready to deploy your first agent?
 
 <Card title="Quickstart" icon="rocket" href="/quickstart">
-  Deploy an agent in 5 minutes with Docker
+  Deploy an agent in 10 minutes
 </Card>

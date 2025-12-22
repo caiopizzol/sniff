@@ -10,42 +10,49 @@ Your agents are defined in a `sniff.yml` file. This guide covers all configurati
 ## Basic Structure
 
 ```yaml
-version: '1.0'
+version: '2.0'
 
 agents:
-  - id: 'my-agent'
-    name: 'My Agent'
-    description: 'What this agent does'
-    system_prompt: |
-      Instructions for your agent...
-    model:
-      anthropic:
-        name: 'claude-sonnet-4-20250514'
-        temperature: 0.7
-        max_tokens: 2000
+  - id: engineer
+    name: Engineer
+    label: agent
+    systemPrompt: |
+      You are a software engineer...
+    runner:
+      claude:
+        allowedTools:
+          - Read
+          - Write
+          - Edit
+        permissionMode: acceptEdits
+        maxTurns: 50
 ```
 
 ## Environment Variables
 
-Credentials come from environment variables, not the YAML file:
+Configuration uses environment variables for credentials and settings:
 
-| Variable                | Required | Description                 |
-| ----------------------- | -------- | --------------------------- |
-| `LINEAR_ACCESS_TOKEN`   | Yes      | Linear API token            |
-| `ANTHROPIC_API_KEY`     | Yes      | Anthropic API key           |
-| `LINEAR_WEBHOOK_SECRET` | No       | Webhook signing secret      |
-| `PORT`                  | No       | Server port (default: 3000) |
+| Variable                | Required | Default | Description |
+| ----------------------- | -------- | ------- | ----------- |
+| `SNIFF_PROXY_URL`       | Yes      | -       | Your proxy worker URL |
+| `SNIFF_PORT`            | No       | 3847    | Local server port |
+| `LINEAR_WEBHOOK_SECRET` | No       | -       | Webhook signature verification |
+| `SNIFF_WORKTREE_ENABLED`| No       | true    | Enable git worktree isolation |
 
 ### Variable Interpolation
 
 Use `${VAR_NAME}` syntax for values that should come from environment:
 
 ```yaml
-mcp_servers:
-  - type: url
-    url: 'https://api.example.com/mcp'
-    name: 'Example MCP'
-    authorization_token: '${EXAMPLE_API_KEY}'
+runner:
+  claude:
+    mcpServers:
+      github:
+        type: stdio
+        command: npx
+        args: ["-y", "@modelcontextprotocol/server-github"]
+        env:
+          GITHUB_TOKEN: '${GITHUB_TOKEN}'
 ```
 
 Syntax options:
@@ -60,271 +67,447 @@ Syntax options:
 Unique identifier. Lowercase letters, numbers, and hyphens only.
 
 ```yaml
-id: 'triage-bot'
+id: engineer
 ```
-
-**Rules:** 1-50 characters, pattern `^[a-z0-9-]+$`
 
 ### `name` (required)
 
 Display name shown in Linear.
 
 ```yaml
-name: 'Triage Assistant'
+name: Engineer
 ```
-
-**Rules:** 1-100 characters
 
 ### `description` (optional)
 
 Brief description of the agent's purpose.
 
 ```yaml
-description: 'Classifies and prioritizes incoming issues'
+description: Handles coding tasks and bug fixes
 ```
 
-**Rules:** 0-500 characters
+### `label` (optional)
 
-### `system_prompt` (required)
-
-Core instructions that define your agent's behavior.
+Filter to only handle issues with this Linear label.
 
 ```yaml
-system_prompt: |
-  You are a triage specialist for a development team.
-
-  When analyzing an issue:
-  1. Classify as BUG/FEATURE/QUESTION/TASK
-  2. Set priority P0-P3
-  3. Provide clear reasoning
-
-  Respond in markdown format.
+label: agent
 ```
 
-<Tip>Use YAML's `|` syntax for multi-line prompts. Be specific about output format.</Tip>
+### `team` (optional)
 
-## Model Configuration
-
-All model options go under `model.anthropic`:
+Filter to only handle issues in this Linear team (by team ID).
 
 ```yaml
-model:
-  anthropic:
-    name: 'claude-sonnet-4-20250514'
-    temperature: 0.7
-    max_tokens: 2000
+team: TEAM_ID_HERE
 ```
 
-### Available Models
+<Note>Both `label` and `team` are optional filters. If omitted, the agent responds to any delegation or @mention.</Note>
 
-| Model                       | Best For               | Speed     |
-| --------------------------- | ---------------------- | --------- |
-| `claude-sonnet-4-20250514`  | Balanced (recommended) | Fast      |
-| `claude-haiku-4-5-20251001` | Quick responses        | Very Fast |
-| `claude-opus-4-20250514`    | Complex reasoning      | Slower    |
+### `systemPrompt` (required)
 
-### `temperature`
+Instructions that define your agent's behavior. Can be a string or a preset:
 
-Controls randomness. Lower = more deterministic.
-
-- `0.0-0.3` - Consistent (triage, classification)
-- `0.4-0.7` - Balanced (default)
-- `0.8-1.0` - Creative
-
-### `max_tokens`
-
-Maximum response length.
-
-- Short: 500-1000
-- Medium: 1000-2000
-- Long: 3000-4000
-- Maximum: 8192
-
-### `thinking` (optional)
-
-Enable extended thinking for complex analysis:
+**String format:**
 
 ```yaml
-model:
-  anthropic:
-    thinking:
-      type: 'enabled'
-      budget_tokens: 2000
+systemPrompt: |
+  You are a software engineer. Help with coding tasks,
+  bug fixes, and code reviews. Write clean, tested code.
 ```
 
-<Note>When thinking is enabled, `temperature` must be `1`.</Note>
-
-## Tools
-
-Give your agent capabilities beyond text analysis.
-
-### Web Search
+**Preset format:**
 
 ```yaml
-tools:
-  - type: web_search_20250305
-    name: web_search
-    max_uses: 10
-    allowed_domains:
-      - 'docs.example.com'
-    blocked_domains:
-      - 'spam.com'
+systemPrompt:
+  type: preset
+  preset: claude_code
+  append: |
+    Additional instructions specific to this project...
 ```
 
-### Web Fetch
+<Tip>Use the `claude_code` preset to get Claude Code's default system prompt, then append project-specific instructions.</Tip>
+
+## Runner Configuration
+
+All execution options go under `runner.claude`:
 
 ```yaml
-tools:
-  - type: web_fetch_20250910
-    name: web_fetch
-    max_uses: 10
-    citations:
-      enabled: true
+runner:
+  claude:
+    allowedTools:
+      - Read
+      - Write
+      - Edit
+    permissionMode: acceptEdits
+    maxTurns: 50
+```
+
+### `allowedTools`
+
+List of tools the agent can use. Available tools from Claude Agent SDK:
+
+| Tool | Description |
+| ---- | ----------- |
+| `Read` | Read file contents |
+| `Write` | Create new files |
+| `Edit` | Edit existing files |
+| `Glob` | Find files by pattern |
+| `Grep` | Search file contents |
+| `Bash` | Execute shell commands |
+| `Task` | Spawn sub-agents |
+| `WebFetch` | Fetch web content |
+| `WebSearch` | Search the web |
+
+```yaml
+allowedTools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Bash
+```
+
+### `disallowedTools`
+
+Explicitly block specific tools:
+
+```yaml
+disallowedTools:
+  - Bash
+  - Task
+```
+
+### `model`
+
+Override the default Claude model:
+
+```yaml
+model: claude-sonnet-4-20250514
+```
+
+### `permissionMode`
+
+Controls how the agent handles tool permissions:
+
+| Mode | Description |
+| ---- | ----------- |
+| `default` | Standard permission prompts |
+| `acceptEdits` | Auto-accept file edits |
+| `bypassPermissions` | Skip all permission checks |
+| `plan` | Plan-only mode (no execution) |
+
+```yaml
+permissionMode: acceptEdits
+```
+
+### `maxTurns`
+
+Maximum number of conversation turns:
+
+```yaml
+maxTurns: 50
+```
+
+### `maxBudgetUsd`
+
+Maximum API spend in USD:
+
+```yaml
+maxBudgetUsd: 10.0
+```
+
+### `maxThinkingTokens`
+
+Maximum tokens for extended thinking:
+
+```yaml
+maxThinkingTokens: 10000
+```
+
+### `env`
+
+Agent-specific environment variables:
+
+```yaml
+env:
+  NODE_ENV: production
+  DEBUG: 'false'
 ```
 
 ## MCP Servers
 
-Connect external tools via Model Context Protocol:
+Connect external tools via Model Context Protocol. Three connection types are supported:
+
+### stdio (command-based)
 
 ```yaml
-mcp_servers:
-  - type: url
-    url: 'https://api.example.com/mcp'
-    name: 'My Integration'
-    authorization_token: '${API_KEY}'
-    tool_configuration:
-      allowed_tools:
-        - 'get_data'
-        - 'search'
+mcpServers:
+  github:
+    type: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_TOKEN: '${GITHUB_TOKEN}'
 ```
 
+### sse (Server-Sent Events)
+
+```yaml
+mcpServers:
+  linear:
+    type: sse
+    url: https://mcp.linear.app/sse
+    headers:
+      Authorization: 'Bearer ${LINEAR_TOKEN}'
+```
+
+### http (HTTP POST)
+
+```yaml
+mcpServers:
+  custom:
+    type: http
+    url: https://api.example.com/mcp
+    headers:
+      X-API-Key: '${API_KEY}'
+```
+
+<Note>When authenticated with Linear, the Linear MCP server is automatically injected if not already configured.</Note>
+
+## Hooks
+
+Hooks allow you to run commands at various points in the agent lifecycle:
+
+```yaml
+runner:
+  claude:
+    hooks:
+      PreToolUse:
+        - matcher: 'Bash'
+          hooks:
+            - type: command
+              command: 'echo "About to run bash command"'
+              timeout: 5000
+      PostToolUse:
+        - hooks:
+            - type: command
+              command: './scripts/log-tool-use.sh'
+      SessionEnd:
+        - hooks:
+            - type: command
+              command: './scripts/cleanup.sh'
+```
+
+### Available Hook Events
+
+| Event | Description |
+| ----- | ----------- |
+| `PreToolUse` | Before a tool is executed |
+| `PostToolUse` | After a tool completes |
+| `PostToolUseFailure` | After a tool fails |
+| `UserPromptSubmit` | When user submits input |
+| `Stop` | When agent stops |
+| `SubagentStart` | When sub-agent starts |
+| `SubagentStop` | When sub-agent stops |
+| `PreCompact` | Before context compaction |
+| `SessionStart` | When session begins |
+| `SessionEnd` | When session ends |
+| `Notification` | On notifications |
+| `PermissionRequest` | On permission requests |
+
+### Hook Matchers
+
+Use `matcher` to filter which tool invocations trigger the hook:
+
+```yaml
+PreToolUse:
+  - matcher: 'Bash'  # Only for Bash tool
+    hooks:
+      - type: command
+        command: './validate-command.sh'
+  - matcher: 'Edit'  # Only for Edit tool
+    hooks:
+      - type: command
+        command: './backup-file.sh'
+```
+
+## Sandbox
+
+Configure sandbox isolation for agent execution:
+
+```yaml
+runner:
+  claude:
+    sandbox:
+      enabled: true
+      autoAllowBashIfSandboxed: true
+      excludedCommands:
+        - rm
+        - sudo
+      network:
+        allowLocalBinding: true
+        httpProxyPort: 8080
+      ignoreViolations:
+        file:
+          - '/tmp/*'
+        network:
+          - 'localhost:*'
+```
+
+### Sandbox Options
+
+| Option | Type | Description |
+| ------ | ---- | ----------- |
+| `enabled` | boolean | Enable sandbox mode |
+| `autoAllowBashIfSandboxed` | boolean | Auto-allow bash when sandboxed |
+| `excludedCommands` | string[] | Commands to block |
+| `allowUnsandboxedCommands` | boolean | Allow unsandboxed commands |
+
+### Network Options
+
+| Option | Type | Description |
+| ------ | ---- | ----------- |
+| `allowLocalBinding` | boolean | Allow binding to local ports |
+| `allowUnixSockets` | string[] | Allowed Unix socket paths |
+| `httpProxyPort` | number | HTTP proxy port |
+| `socksProxyPort` | number | SOCKS proxy port |
+
+### Ignore Violations
+
+| Option | Type | Description |
+| ------ | ---- | ----------- |
+| `file` | string[] | File path patterns to ignore |
+| `network` | string[] | Network patterns to ignore |
+
 ## Complete Examples
+
+### Engineering Agent
+
+```yaml
+version: '2.0'
+
+agents:
+  - id: engineer
+    name: Engineer
+    label: agent
+    systemPrompt: |
+      You are a software engineer. Help with coding tasks,
+      bug fixes, and code reviews.
+
+      Guidelines:
+      - Write clean, well-tested code
+      - Follow existing patterns in the codebase
+      - Explain your changes clearly
+    runner:
+      claude:
+        allowedTools:
+          - Read
+          - Write
+          - Edit
+          - Glob
+          - Grep
+          - Bash
+        permissionMode: acceptEdits
+        maxTurns: 50
+        mcpServers:
+          github:
+            type: stdio
+            command: npx
+            args: ["-y", "@modelcontextprotocol/server-github"]
+            env:
+              GITHUB_TOKEN: '${GITHUB_TOKEN}'
+```
 
 ### Triage Agent
 
 ```yaml
-version: '1.0'
+version: '2.0'
 
 agents:
-  - id: 'triage-bot'
-    name: 'Triage Assistant'
-    description: 'Classifies and prioritizes issues'
-
-    system_prompt: |
-      You are a triage specialist.
-
-      For each issue:
-      1. Classify as: bug, feature, question, task
-      2. Set priority: P0-P3
-      3. Suggest labels
-      4. Explain reasoning
-
-      Be concise.
-
-    model:
-      anthropic:
-        name: 'claude-sonnet-4-20250514'
-        temperature: 0.3
-        max_tokens: 1500
-```
-
-### Research Agent with Web Search
-
-```yaml
-version: '1.0'
-
-agents:
-  - id: 'research-bot'
-    name: 'Research Assistant'
-    description: 'Answers questions using web search'
-
-    system_prompt: |
-      You are a research assistant.
-
-      When asked a question:
-      1. Search for relevant information
-      2. Fetch detailed content from best sources
-      3. Provide answer with citations
-
-      Always cite your sources.
-
-    model:
-      anthropic:
-        name: 'claude-sonnet-4-20250514'
-        temperature: 0.5
-        max_tokens: 3000
-        tool_choice:
-          type: 'auto'
-        tools:
-          - type: web_search_20250305
-            name: web_search
-            max_uses: 5
-          - type: web_fetch_20250910
-            name: web_fetch
-            max_uses: 10
-            citations:
-              enabled: true
+  - id: triage
+    name: Triage Bot
+    label: triage
+    systemPrompt: |
+      You are a triage specialist. Analyze incoming issues and:
+      1. Classify as: bug, feature, question, or task
+      2. Set priority: P0 (critical) to P3 (low)
+      3. Suggest relevant labels
+      4. Provide brief reasoning
+    runner:
+      claude:
+        allowedTools:
+          - Read
+          - Glob
+          - Grep
+        permissionMode: default
+        maxTurns: 10
 ```
 
 ### Multiple Agents
 
 ```yaml
-version: '1.0'
+version: '2.0'
 
 agents:
-  - id: 'triage-bot'
-    name: 'Triage Bot'
-    system_prompt: |
-      You triage incoming issues.
-    model:
-      anthropic:
-        name: 'claude-sonnet-4-20250514'
-        temperature: 0.3
+  - id: engineer
+    name: Engineer
+    label: agent
+    systemPrompt: |
+      You are a software engineer...
+    runner:
+      claude:
+        allowedTools:
+          - Read
+          - Write
+          - Edit
+          - Glob
+          - Grep
+          - Bash
+        permissionMode: acceptEdits
+        maxTurns: 50
 
-  - id: 'docs-bot'
-    name: 'Docs Bot'
-    system_prompt: |
-      You answer documentation questions.
-    model:
-      anthropic:
-        name: 'claude-sonnet-4-20250514'
-        temperature: 0.5
-        tools:
-          - type: web_search_20250305
-            name: web_search
+  - id: reviewer
+    name: Code Reviewer
+    label: review
+    team: ENG_TEAM_ID
+    systemPrompt: |
+      You are a code reviewer...
+    runner:
+      claude:
+        allowedTools:
+          - Read
+          - Glob
+          - Grep
+        permissionMode: default
+        maxTurns: 20
 ```
 
 ## Validation
 
-Validate your configuration before running:
+Validate your configuration:
 
 ```bash
 sniff validate
 ```
 
-Common errors:
+Or specify a custom config file:
 
-<AccordionGroup>
-  <Accordion title="Invalid agent.id format">
-    Use only lowercase letters, numbers, and hyphens.
-    ```yaml
-    # ❌ Invalid
-    id: "My_Bot"
+```bash
+sniff validate -c ./my-config.yml
+```
 
-    # ✅ Valid
-    id: "my-bot"
-    ```
+## CLI Commands
 
-  </Accordion>
-
-<Accordion title="Missing required field">
-  Ensure all required fields are present: `id`, `name`, `system_prompt`, and `model`.
-</Accordion>
-
-  <Accordion title="Temperature out of range">
-    Temperature must be between 0.0 and 1.0.
-  </Accordion>
-</AccordionGroup>
+| Command | Description |
+| ------- | ----------- |
+| `sniff init` | Create initial sniff.yml |
+| `sniff validate` | Validate configuration |
+| `sniff auth linear` | Authenticate with Linear |
+| `sniff start` | Start the agent server |
+| `sniff status` | Check health status |
+| `sniff logs` | View execution logs |
 
 ## Next Steps
 

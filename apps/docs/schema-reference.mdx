@@ -4,207 +4,373 @@ description: Complete technical specification of all configuration fields
 ---
 
 <Note>
-  **Auto-generated from JSON Schema**
+  **Auto-generated from Zod Schema**
 
-Last updated: 2025-11-27
+Last updated: 2025-12-22
 
 This page provides the complete technical specification of all configuration fields. For explanations and best practices, see the [Configuration](/configuration) guide.
 
 </Note>
 
-### Root Configuration
+## Root Configuration
 
-| Field     | Type     | Required |
-| --------- | -------- | -------- |
-| `version` | `"1.0"`  | ✓        |
-| `agents`  | object[] | ✓        |
+| Field     | Type       | Required |
+| --------- | ---------- | -------- |
+| `version` | `"2.0"`    | Yes      |
+| `agents`  | `Agent[]`  | Yes      |
 
-### agents[]
+```yaml
+version: '2.0'
+agents:
+  - id: engineer
+    # ...
+```
 
-| Field           | Type     | Required | Constraints                               |
-| --------------- | -------- | -------- | ----------------------------------------- |
-| `id`            | `string` | ✓        | Pattern: `^[a-z0-9-]+$`<br />Length: 1-50 |
-| `name`          | `string` | ✓        | Length: 1-100                             |
-| `description`   | `string` |          | Max length: 500                           |
-| `system_prompt` | `string` | ✓        | Length: 1-50000                           |
-| `model`         | `object` | ✓        | -                                         |
+## Agent
 
-### agents[].model
+| Field         | Type           | Required | Description |
+| ------------- | -------------- | -------- | ----------- |
+| `id`          | `string`       | Yes      | Unique identifier (lowercase, numbers, hyphens) |
+| `name`        | `string`       | Yes      | Display name |
+| `description` | `string`       | No       | Brief description |
+| `label`       | `string`       | No       | Filter: only handle issues with this label |
+| `team`        | `string`       | No       | Filter: only handle issues in this team |
+| `systemPrompt`| `SystemPrompt` | No       | Agent behavior instructions |
+| `runner`      | `RunnerConfig` | Yes      | Execution configuration |
 
-| Field       | Type     | Required |
-| ----------- | -------- | -------- |
-| `anthropic` | `object` | ✓        |
+## SystemPrompt
 
-### agents[].model.anthropic
+Union type - either a string or a preset object:
 
-| Field            | Type      | Required | Constraints          | Default                      |
-| ---------------- | --------- | -------- | -------------------- | ---------------------------- |
-| `name`           | `string`  | ✓        | -                    | `"claude-sonnet-4-20250514"` |
-| `temperature`    | `number`  | ✓        | 0 - 1                | `1`                          |
-| `max_tokens`     | `integer` | ✓        | 1 - 8192             | `4096`                       |
-| `top_p`          | `number`  |          | 0 - 1                | -                            |
-| `top_k`          | `integer` |          | 0 - 9007199254740991 | -                            |
-| `stop_sequences` | string[]  |          | Max 10 items         | -                            |
-| `thinking`       | `object`  |          | -                    | -                            |
-| `metadata`       | `object`  |          | -                    | -                            |
-| `tool_choice`    | `object`  |          | -                    | -                            |
-| `tools`          | object[]  |          | -                    | -                            |
-| `mcp_servers`    | object[]  |          | -                    | -                            |
+**String format:**
+```yaml
+systemPrompt: |
+  You are a software engineer...
+```
 
-### agents[].model.anthropic.thinking
+**Preset format:**
 
-Union type with 2 variants:
+| Field    | Type             | Required | Description |
+| -------- | ---------------- | -------- | ----------- |
+| `type`   | `"preset"`       | Yes      | Must be "preset" |
+| `preset` | `"claude_code"`  | Yes      | Preset name |
+| `append` | `string`         | No       | Additional instructions |
 
-**`enabled` variant:**
+```yaml
+systemPrompt:
+  type: preset
+  preset: claude_code
+  append: |
+    Project-specific instructions...
+```
 
-| Field           | Type        | Required | Constraints             |
-| --------------- | ----------- | -------- | ----------------------- |
-| `type`          | `"enabled"` | ✓        | -                       |
-| `budget_tokens` | `integer`   | ✓        | 1024 - 9007199254740991 |
+## RunnerConfig
 
-**`disabled` variant:**
+| Field   | Type                   | Required | Description |
+| ------- | ---------------------- | -------- | ----------- |
+| `claude`| `ClaudeRunnerOptions`  | No       | Claude Agent SDK options |
 
-| Field  | Type         | Required | Constraints |
-| ------ | ------------ | -------- | ----------- |
-| `type` | `"disabled"` | ✓        | -           |
+Future: Additional runner types (gemini, codex) may be added.
 
-### agents[].model.anthropic.metadata
+## ClaudeRunnerOptions
 
-| Field     | Type     | Required | Constraints     |
-| --------- | -------- | -------- | --------------- |
-| `user_id` | `string` |          | Max length: 256 |
+| Field                  | Type                | Required | Description |
+| ---------------------- | ------------------- | -------- | ----------- |
+| `model`                | `string`            | No       | Claude model override |
+| `allowedTools`         | `string[]`          | No       | Tools the agent can use |
+| `disallowedTools`      | `string[]`          | No       | Tools to block |
+| `mcpServers`           | `McpServerMap`      | No       | MCP server configurations |
+| `permissionMode`       | `PermissionMode`    | No       | How to handle permissions |
+| `maxTurns`             | `number`            | No       | Max conversation turns |
+| `maxBudgetUsd`         | `number`            | No       | Max API spend in USD |
+| `maxThinkingTokens`    | `number`            | No       | Max tokens for thinking |
+| `hooks`                | `Hooks`             | No       | Lifecycle hooks |
+| `sandbox`              | `SandboxSettings`   | No       | Sandbox configuration |
+| `settingSources`       | `SettingSource[]`   | No       | Setting sources to use |
+| `additionalDirectories`| `string[]`          | No       | Additional dirs for agent access |
+| `env`                  | `Record<string, string>` | No  | Agent-specific env vars |
+| `betas`                | `string[]`          | No       | Beta features to enable |
 
-### agents[].model.anthropic.tool_choice
+## PermissionMode
 
-Union type with 4 variants:
+Enum with values:
 
-**`auto` variant:**
+| Value               | Description |
+| ------------------- | ----------- |
+| `default`           | Standard permission prompts |
+| `acceptEdits`       | Auto-accept file edits |
+| `bypassPermissions` | Skip all permission checks |
+| `plan`              | Plan-only mode (no execution) |
 
-| Field                       | Type      | Required | Constraints |
-| --------------------------- | --------- | -------- | ----------- |
-| `type`                      | `"auto"`  | ✓        | -           |
-| `disable_parallel_tool_use` | `boolean` |          | -           |
+## Available Tools
 
-**`any` variant:**
+Tools from Claude Agent SDK:
 
-| Field                       | Type      | Required | Constraints |
-| --------------------------- | --------- | -------- | ----------- |
-| `type`                      | `"any"`   | ✓        | -           |
-| `disable_parallel_tool_use` | `boolean` |          | -           |
+| Tool        | Description |
+| ----------- | ----------- |
+| `Read`      | Read file contents |
+| `Write`     | Create new files |
+| `Edit`      | Edit existing files |
+| `Glob`      | Find files by pattern |
+| `Grep`      | Search file contents |
+| `Bash`      | Execute shell commands |
+| `Task`      | Spawn sub-agents |
+| `WebFetch`  | Fetch web content |
+| `WebSearch` | Search the web |
 
-**`tool` variant:**
+## McpServerMap
 
-| Field                       | Type      | Required | Constraints |
-| --------------------------- | --------- | -------- | ----------- |
-| `type`                      | `"tool"`  | ✓        | -           |
-| `name`                      | `string`  | ✓        | -           |
-| `disable_parallel_tool_use` | `boolean` |          | -           |
+Map of server name to configuration:
 
-**`none` variant:**
+```yaml
+mcpServers:
+  server-name:
+    type: stdio
+    # ...
+```
 
-| Field  | Type     | Required | Constraints |
-| ------ | -------- | -------- | ----------- |
-| `type` | `"none"` | ✓        | -           |
+### McpServer (Union Type)
 
-### agents[].model.anthropic.tools[]
+Three variants based on connection type:
 
-Array items must be one of:
+#### stdio (command-based)
 
-#### web_search_20250305
+| Field     | Type                  | Required | Description |
+| --------- | --------------------- | -------- | ----------- |
+| `type`    | `"stdio"` or omitted  | No       | Defaults to stdio |
+| `command` | `string`              | Yes      | Command to execute |
+| `args`    | `string[]`            | No       | Command arguments |
+| `env`     | `Record<string, string>` | No    | Environment variables |
 
-| Field             | Type                    | Required | Constraints          |
-| ----------------- | ----------------------- | -------- | -------------------- |
-| `type`            | `"web_search_20250305"` | ✓        | -                    |
-| `name`            | `"web_search"`          | ✓        | -                    |
-| `max_uses`        | `integer`               |          | 1 - 9007199254740991 |
-| `allowed_domains` | string[]                |          | -                    |
-| `blocked_domains` | string[]                |          | -                    |
-| `user_location`   | `object`                |          | -                    |
+```yaml
+mcpServers:
+  github:
+    type: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_TOKEN: '${GITHUB_TOKEN}'
+```
 
-### agents[].model.anthropic.tools[].user_location
+#### sse (Server-Sent Events)
 
-| Field      | Type            | Required |
-| ---------- | --------------- | -------- |
-| `type`     | `"approximate"` | ✓        |
-| `city`     | `string`        |
-| `region`   | `string`        |
-| `country`  | `string`        |
-| `timezone` | `string`        |
+| Field     | Type                  | Required | Description |
+| --------- | --------------------- | -------- | ----------- |
+| `type`    | `"sse"`               | Yes      | Must be "sse" |
+| `url`     | `string`              | Yes      | SSE endpoint URL |
+| `headers` | `Record<string, string>` | No    | HTTP headers |
 
-#### web_fetch_20250910
+```yaml
+mcpServers:
+  linear:
+    type: sse
+    url: https://mcp.linear.app/sse
+    headers:
+      Authorization: 'Bearer ${LINEAR_TOKEN}'
+```
 
-| Field                | Type                   | Required | Constraints          |
-| -------------------- | ---------------------- | -------- | -------------------- |
-| `type`               | `"web_fetch_20250910"` | ✓        | -                    |
-| `name`               | `"web_fetch"`          | ✓        | -                    |
-| `max_uses`           | `integer`              |          | 1 - 9007199254740991 |
-| `allowed_domains`    | string[]               |          | -                    |
-| `blocked_domains`    | string[]               |          | -                    |
-| `citations`          | `object`               |          | -                    |
-| `max_content_tokens` | `integer`              |          | 1 - 9007199254740991 |
+#### http (HTTP POST)
 
-### agents[].model.anthropic.tools[].citations
+| Field     | Type                  | Required | Description |
+| --------- | --------------------- | -------- | ----------- |
+| `type`    | `"http"`              | Yes      | Must be "http" |
+| `url`     | `string`              | Yes      | HTTP endpoint URL |
+| `headers` | `Record<string, string>` | No    | HTTP headers |
 
-| Field     | Type      | Required |
-| --------- | --------- | -------- |
-| `enabled` | `boolean` | ✓        |
+```yaml
+mcpServers:
+  custom:
+    type: http
+    url: https://api.example.com/mcp
+    headers:
+      X-API-Key: '${API_KEY}'
+```
 
-### agents[].model.anthropic.mcp_servers[]
+## Hooks
 
-| Field                 | Type     | Required | Constraints   |
-| --------------------- | -------- | -------- | ------------- |
-| `type`                | `"url"`  | ✓        | -             |
-| `url`                 | `string` | ✓        | Format: uri   |
-| `name`                | `string` | ✓        | Length: 1-100 |
-| `authorization_token` | `string` |          | -             |
-| `tool_configuration`  | `object` |          | -             |
+Map of hook event to hook matchers:
 
-### agents[].model.anthropic.mcp_servers[].tool_configuration
+| Event                | Description |
+| -------------------- | ----------- |
+| `PreToolUse`         | Before a tool is executed |
+| `PostToolUse`        | After a tool completes |
+| `PostToolUseFailure` | After a tool fails |
+| `UserPromptSubmit`   | When user submits input |
+| `Stop`               | When agent stops |
+| `SubagentStart`      | When sub-agent starts |
+| `SubagentStop`       | When sub-agent stops |
+| `PreCompact`         | Before context compaction |
+| `SessionStart`       | When session begins |
+| `SessionEnd`         | When session ends |
+| `Notification`       | On notifications |
+| `PermissionRequest`  | On permission requests |
 
-| Field            | Type      | Required |
-| ---------------- | --------- | -------- |
-| `enabled`        | `boolean` |
-| `allowed_tools`  | string[]  |
-| `disabled_tools` | string[]  |
+### HookMatcher
 
-### Supported Claude Models
+| Field    | Type            | Required | Description |
+| -------- | --------------- | -------- | ----------- |
+| `matcher`| `string`        | No       | Tool name pattern to match |
+| `hooks`  | `HookCommand[]` | Yes      | Commands to execute |
 
-Models and their supported features:
+### HookCommand
 
-| Model Name                   | web_search | web_fetch | thinking | mcp |
-| ---------------------------- | ---------- | --------- | -------- | --- |
-| `claude-sonnet-4-5-20250929` | ✓          | ✓         | ✓        | ✓   |
-| `claude-opus-4-1-20250805`   | ✓          | ✓         | ✓        | ✓   |
-| `claude-haiku-4-5-20251001`  | ✓          | ✓         |          | ✓   |
-| `claude-3-7-sonnet-20250219` | ✓          | ✓         | ✓        | ✓   |
-| `claude-sonnet-4-20250514`   | ✓          | ✓         | ✓        | ✓   |
-| `claude-3-5-sonnet-20241022` |            |           | ✓        | ✓   |
-| `claude-3-5-haiku-20241022`  |            |           |          | ✓   |
+| Field     | Type         | Required | Description |
+| --------- | ------------ | -------- | ----------- |
+| `type`    | `"command"`  | Yes      | Must be "command" |
+| `command` | `string`     | Yes      | Shell command to run |
+| `timeout` | `number`     | No       | Timeout in milliseconds |
 
-### Cross-Field Validation Rules
+```yaml
+hooks:
+  PreToolUse:
+    - matcher: 'Bash'
+      hooks:
+        - type: command
+          command: './validate-bash.sh'
+          timeout: 5000
+  SessionEnd:
+    - hooks:
+        - type: command
+          command: './cleanup.sh'
+```
 
-The following validation rules apply across multiple fields:
+## SandboxSettings
 
-1. **Thinking temperature constraint**
-   When `agent.model.anthropic.thinking.type` is `"enabled"`, the `agent.model.anthropic.temperature` must be exactly `1.0`.
-   [Reference](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#important-considerations-when-using-extended-thinking)
+| Field                      | Type                      | Required | Description |
+| -------------------------- | ------------------------- | -------- | ----------- |
+| `enabled`                  | `boolean`                 | No       | Enable sandbox mode |
+| `autoAllowBashIfSandboxed` | `boolean`                 | No       | Auto-allow bash in sandbox |
+| `excludedCommands`         | `string[]`                | No       | Commands to block |
+| `allowUnsandboxedCommands` | `boolean`                 | No       | Allow unsandboxed commands |
+| `network`                  | `SandboxNetwork`          | No       | Network restrictions |
+| `ignoreViolations`         | `SandboxIgnoreViolations` | No       | Violations to ignore |
+| `enableWeakerNestedSandbox`| `boolean`                 | No       | Enable weaker nested sandbox |
 
-2. **Thinking token budget**
-   When thinking is enabled, `agent.model.anthropic.max_tokens` must be greater than `agent.model.anthropic.thinking.budget_tokens`.
-   [Reference](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#max-tokens-and-context-window-size)
+### SandboxNetwork
 
-3. **Model capability validation**
-   - `web_search_20250305` tool requires a model that supports `web_search`
-   - `web_fetch_20250910` tool requires a model that supports `web_fetch`
-   - `thinking` configuration requires a model that supports `thinking`
-   - All models support `mcp` (MCP servers)
+| Field               | Type       | Required | Description |
+| ------------------- | ---------- | -------- | ----------- |
+| `allowLocalBinding` | `boolean`  | No       | Allow binding to local ports |
+| `allowUnixSockets`  | `string[]` | No       | Allowed Unix socket paths |
+| `allowAllUnixSockets`| `boolean` | No       | Allow all Unix sockets |
+| `httpProxyPort`     | `number`   | No       | HTTP proxy port |
+| `socksProxyPort`    | `number`   | No       | SOCKS proxy port |
 
-   See the supported models table above for feature availability.
+### SandboxIgnoreViolations
 
-### Additional Properties
+| Field     | Type       | Required | Description |
+| --------- | ---------- | -------- | ----------- |
+| `file`    | `string[]` | No       | File path patterns to ignore |
+| `network` | `string[]` | No       | Network patterns to ignore |
 
-All objects in the configuration use `additionalProperties: false`, meaning:
+```yaml
+sandbox:
+  enabled: true
+  autoAllowBashIfSandboxed: true
+  excludedCommands:
+    - rm
+    - sudo
+  network:
+    allowLocalBinding: true
+    httpProxyPort: 8080
+  ignoreViolations:
+    file:
+      - '/tmp/*'
+    network:
+      - 'localhost:*'
+```
 
-- No extra fields are allowed beyond those specified
-- Typos in field names will cause validation errors
-- This ensures configuration correctness and catches common mistakes
+## SettingSource
+
+Enum with values:
+
+| Value     | Description |
+| --------- | ----------- |
+| `user`    | User-level settings |
+| `project` | Project-level settings |
+| `local`   | Local settings |
+
+## Environment Variable Interpolation
+
+The configuration supports environment variable interpolation using `${VAR}` syntax:
+
+| Syntax              | Description |
+| ------------------- | ----------- |
+| `${VAR_NAME}`       | Required - error if not set |
+| `${VAR_NAME:-default}` | Optional with default value |
+
+```yaml
+mcpServers:
+  github:
+    env:
+      GITHUB_TOKEN: '${GITHUB_TOKEN}'           # Required
+      DEBUG: '${DEBUG:-false}'                  # Optional with default
+```
+
+## Complete Example
+
+```yaml
+version: '2.0'
+
+agents:
+  - id: engineer
+    name: Engineer
+    description: Handles coding tasks and bug fixes
+    label: agent
+    systemPrompt:
+      type: preset
+      preset: claude_code
+      append: |
+        This is the Sniff project. Follow existing patterns.
+    runner:
+      claude:
+        allowedTools:
+          - Read
+          - Write
+          - Edit
+          - Glob
+          - Grep
+          - Bash
+        permissionMode: acceptEdits
+        maxTurns: 50
+        maxBudgetUsd: 10.0
+        mcpServers:
+          github:
+            type: stdio
+            command: npx
+            args: ["-y", "@modelcontextprotocol/server-github"]
+            env:
+              GITHUB_TOKEN: '${GITHUB_TOKEN}'
+        hooks:
+          SessionEnd:
+            - hooks:
+                - type: command
+                  command: 'git status'
+        sandbox:
+          enabled: true
+          autoAllowBashIfSandboxed: true
+          excludedCommands:
+            - rm -rf
+        env:
+          NODE_ENV: production
+```
+
+## Validation
+
+Validate your configuration with:
+
+```bash
+sniff validate
+sniff validate -c ./custom-config.yml
+```
+
+Common validation errors:
+
+| Error | Cause |
+| ----- | ----- |
+| Invalid version | Must be exactly `"2.0"` |
+| Missing agents | At least one agent required |
+| Invalid agent id | Must be lowercase alphanumeric with hyphens |
+| Missing runner | Each agent needs a `runner` configuration |
+| Invalid MCP server type | Must be `stdio`, `sse`, or `http` |
+| Unknown hook event | Hook event name not recognized |
