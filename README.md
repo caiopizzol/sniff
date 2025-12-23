@@ -1,3 +1,5 @@
+<img width="60" height="60" alt="sniff-mascot" src="https://github.com/user-attachments/assets/041aad2e-c7c1-4df6-b235-127e4602377c" />
+
 # Sniff - Local-First AI Agents for Linear
 
 > Declarative AI agents that run on your machine. Like Docker Compose for AI agents.
