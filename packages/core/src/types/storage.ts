@@ -9,6 +9,7 @@ export interface OAuth2Tokens {
   expiresAt?: Date
   tokenType?: string
   scope?: string
+  organizationId?: string
 }
 
 export interface TokenStorage {

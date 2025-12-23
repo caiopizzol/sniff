@@ -121,22 +121,48 @@ export const authCommand = new Command('auth')
     process.exit(0)
   })
 
+async function fetchOrganizationId(accessToken: string): Promise<string | undefined> {
+  try {
+    const response = await fetch('https://api.linear.app/graphql', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        query: `{ organization { id } }`,
+      }),
+    })
+
+    if (!response.ok) return undefined
+
+    const data = (await response.json()) as { data?: { organization: { id: string } } }
+    return data.data?.organization.id
+  } catch {
+    return undefined
+  }
+}
+
 async function storeTokens(tokens: OAuthTokens) {
+  const organizationId = await fetchOrganizationId(tokens.access_token)
   await tokenStorage.set('linear', {
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token,
     tokenType: tokens.token_type,
     scope: tokens.scope,
     expiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : undefined,
+    organizationId,
   })
 }
 
 async function storeTokensLocally(tokens: OAuthTokens) {
+  const organizationId = await fetchOrganizationId(tokens.access_token)
   await tokenStorage.setLocal('linear', {
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token,
     tokenType: tokens.token_type,
     scope: tokens.scope,
     expiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : undefined,
+    organizationId,
   })
 }

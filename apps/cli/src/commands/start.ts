@@ -1,8 +1,9 @@
 /**
- * start command - Start the local agent server
+ * start command - Start the agent and connect to the cloud proxy
  */
 
 import { loadConfig } from '@sniff/config'
+import { ConnectionClient } from '@sniff/connection'
 import { getEnvConfig, logger, setLogLevel } from '@sniff/core'
 import {
   LinearClient,
@@ -12,15 +13,14 @@ import {
   refreshLinearTokens,
   verifyWebhookSignature,
 } from '@sniff/linear'
-import { Coordinator, LocalServer, WorktreeManager } from '@sniff/orchestrator'
+import { Coordinator, WorktreeManager } from '@sniff/orchestrator'
 import { createClaudeRunner } from '@sniff/runner-claude'
 import { ensureDirectories, tokenStorage } from '@sniff/storage'
 import { Command } from 'commander'
 
 export const startCommand = new Command('start')
-  .description('Start the local agent server')
+  .description('Start the agent and connect to the cloud proxy')
   .option('-c, --config <path>', 'Path to config file', 'sniff.yml')
-  .option('-p, --port <number>', 'Local server port')
   .option('-v, --verbose', 'Enable verbose logging')
   .action(async (options) => {
     if (options.verbose) {
@@ -48,6 +48,13 @@ export const startCommand = new Command('start')
       process.exit(1)
     }
 
+    if (!tokens.organizationId) {
+      console.error('Missing organization ID. Please re-authenticate: sniff auth linear --force')
+      process.exit(1)
+    }
+
+    const organizationId = tokens.organizationId
+
     // Track if using local tokens (for saving refreshed tokens to correct location)
     const isLocalToken = await tokenStorage.hasLocal('linear')
 
@@ -55,7 +62,8 @@ export const startCommand = new Command('start')
     if (needsRefresh(tokens)) {
       try {
         logger.info('Refreshing expired Linear token...')
-        tokens = await refreshLinearTokens(tokens, env.proxyUrl)
+        const refreshedTokens = await refreshLinearTokens(tokens, env.proxyUrl)
+        tokens = { ...refreshedTokens, organizationId: tokens.organizationId }
         if (isLocalToken) {
           await tokenStorage.setLocal('linear', tokens)
         } else {
@@ -83,97 +91,104 @@ export const startCommand = new Command('start')
       linearAccessToken: tokens.accessToken,
     })
 
-    const port = options.port ? parseInt(options.port, 10) : env.port
-
-    // Create local server
-    const server = new LocalServer({
-      port,
-      onWebhook: async (request) => {
-        try {
-          const body = await request.text()
-
-          // Verify signature if webhook secret is set
-          const signature = request.headers.get('linear-signature')
-          if (env.linearWebhookSecret && signature) {
-            if (!verifyWebhookSignature(body, signature, env.linearWebhookSecret)) {
-              return new Response('Invalid signature', { status: 401 })
-            }
+    // Handle webhook received via WebSocket
+    const handleWebhook = async (body: string, headers: Record<string, string>) => {
+      try {
+        // Verify signature if webhook secret is set
+        const signature = headers['linear-signature']
+        if (env.linearWebhookSecret && signature) {
+          if (!verifyWebhookSignature(body, signature, env.linearWebhookSecret)) {
+            logger.warn('Invalid webhook signature')
+            return
           }
-
-          const payload = JSON.parse(body)
-
-          logger.debug('Raw webhook payload', { payload: JSON.stringify(payload, null, 2) })
-
-          logger.info('Webhook received', {
-            type: payload.type,
-            action: payload.action,
-          })
-
-          // Handle AgentSessionEvent (Linear Agents API)
-          const agentSessionEvent = parseAgentSessionEvent(payload)
-          if (agentSessionEvent) {
-            logger.info('Agent session event', {
-              sessionId: agentSessionEvent.sessionId,
-              issueIdentifier: agentSessionEvent.issue.identifier,
-              action: agentSessionEvent.action,
-            })
-
-            // Process async - don't await, return immediately
-            // This ensures we respond within 5s as required by Linear
-            coordinator.handleAgentSession(agentSessionEvent, linearClient).catch((error) => {
-              logger.error('Agent session handling failed', {
-                error: error instanceof Error ? error.message : String(error),
-              })
-            })
-
-            return new Response('OK', { status: 200 })
-          }
-
-          // Handle legacy Issue webhooks
-          const issueEvent = parseWebhook(payload)
-          if (issueEvent) {
-            logger.info('Issue event', {
-              action: issueEvent.action,
-              issueId: issueEvent.data.issueId,
-              labels: issueEvent.data.labels,
-            })
-
-            // Process async
-            coordinator.handleWebhook(issueEvent).catch((error) => {
-              logger.error('Webhook handling failed', {
-                error: error instanceof Error ? error.message : String(error),
-              })
-            })
-
-            return new Response('OK', { status: 200 })
-          }
-
-          logger.debug('Ignoring webhook', { type: payload.type })
-          return new Response('OK', { status: 200 })
-        } catch (error) {
-          logger.error('Webhook error', {
-            error: error instanceof Error ? error.message : String(error),
-          })
-          return new Response('Internal error', { status: 500 })
         }
+
+        const payload = JSON.parse(body)
+
+        logger.debug('Raw webhook payload', { payload: JSON.stringify(payload, null, 2) })
+
+        logger.info('Webhook received', {
+          type: payload.type,
+          action: payload.action,
+        })
+
+        // Handle AgentSessionEvent (Linear Agents API)
+        const agentSessionEvent = parseAgentSessionEvent(payload)
+        if (agentSessionEvent) {
+          logger.info('Agent session event', {
+            sessionId: agentSessionEvent.sessionId,
+            issueIdentifier: agentSessionEvent.issue.identifier,
+            action: agentSessionEvent.action,
+          })
+
+          coordinator.handleAgentSession(agentSessionEvent, linearClient).catch((error) => {
+            logger.error('Agent session handling failed', {
+              error: error instanceof Error ? error.message : String(error),
+            })
+          })
+          return
+        }
+
+        // Handle legacy Issue webhooks
+        const issueEvent = parseWebhook(payload)
+        if (issueEvent) {
+          logger.info('Issue event', {
+            action: issueEvent.action,
+            issueId: issueEvent.data.issueId,
+            labels: issueEvent.data.labels,
+          })
+
+          coordinator.handleWebhook(issueEvent).catch((error) => {
+            logger.error('Webhook handling failed', {
+              error: error instanceof Error ? error.message : String(error),
+            })
+          })
+          return
+        }
+
+        logger.debug('Ignoring webhook', { type: payload.type })
+      } catch (error) {
+        logger.error('Webhook error', {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    // Create WebSocket connection to proxy
+    const connection = new ConnectionClient({
+      proxyUrl: env.proxyUrl,
+      organizationId,
+      accessToken: tokens.accessToken,
+      onWebhook: handleWebhook,
+      onConnected: () => {
+        console.log('')
+        console.log('Connected to proxy')
+        console.log('Sniffing for webhooks...')
+      },
+      onDisconnected: () => {
+        console.log('Disconnected from proxy, reconnecting...')
+      },
+      onError: (error) => {
+        logger.error('Connection error', { error: error.message })
       },
     })
 
-    // Start server
-    server.start()
-    console.log(`Local server started on http://localhost:${port}`)
-    console.log('')
-    console.log('Start your tunnel manually (e.g., ngrok http ' + port + ')')
-    console.log('Then set TUNNEL_URL in apps/proxy/.env')
-    console.log('')
-    console.log('Sniffing for webhooks...')
+    console.log(`Connecting to ${env.proxyUrl}...`)
+
+    try {
+      await connection.connect()
+    } catch (error) {
+      console.error('Failed to connect:', error instanceof Error ? error.message : error)
+      process.exit(1)
+    }
+
     console.log('Press Ctrl+C to stop')
 
     // Handle shutdown
     process.on('SIGINT', () => {
       console.log('')
       console.log('Stopping...')
-      server.stop()
+      connection.disconnect()
       process.exit(0)
     })
   })

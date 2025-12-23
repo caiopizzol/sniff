@@ -3,6 +3,7 @@
  */
 
 import type { Env } from '../index'
+import { forwardWebhookToConnection } from '../connection/handler'
 
 /**
  * Verify Linear webhook signature
@@ -31,13 +32,8 @@ async function verifySignature(
 }
 
 export async function handleWebhook(request: Request, env: Env): Promise<Response> {
-  // Check if tunnel URL is configured
-  if (!env.TUNNEL_URL) {
-    return new Response('Tunnel URL not configured', { status: 503 })
-  }
-
   const body = await request.text()
-
+  console.log('Received webhook:', body)
   // Verify signature if secret is set
   if (env.WEBHOOK_SECRET) {
     const signature = request.headers.get('linear-signature')
@@ -51,28 +47,30 @@ export async function handleWebhook(request: Request, env: Env): Promise<Respons
     }
   }
 
-  // Forward to local agent
+  // Parse webhook to get organization ID
+  let organizationId: string
   try {
-    const forwardUrl = `${env.TUNNEL_URL}/webhook/linear`
-
-    const response = await fetch(forwardUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Linear-Signature': request.headers.get('linear-signature') ?? '',
-        'X-Forwarded-For': request.headers.get('cf-connecting-ip') ?? '',
-      },
-      body,
-    })
-
-    return new Response(await response.text(), {
-      status: response.status,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
-  } catch (error) {
-    console.error('Failed to forward webhook:', error)
-    return new Response('Failed to forward webhook', { status: 502 })
+    const webhook = JSON.parse(body) as { organizationId?: string }
+    if (!webhook.organizationId) {
+      return new Response('Missing organization ID in webhook', { status: 400 })
+    }
+    organizationId = webhook.organizationId
+  } catch {
+    return new Response('Invalid webhook payload', { status: 400 })
   }
+
+  // Forward to connected CLI via Durable Object
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    'linear-signature': request.headers.get('linear-signature') ?? '',
+    'x-forwarded-for': request.headers.get('cf-connecting-ip') ?? '',
+  }
+
+  const success = await forwardWebhookToConnection(organizationId, body, headers, env)
+
+  if (!success) {
+    return new Response('No CLI connected for this organization', { status: 503 })
+  }
+
+  return new Response('OK', { status: 200 })
 }

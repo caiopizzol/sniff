@@ -3,8 +3,17 @@ main = "src/index.ts"
 compatibility_date = "2025-12-18"
 compatibility_flags = ["nodejs_compat"]
 
+# Durable Objects for WebSocket connections
+[durable_objects]
+bindings = [
+  { name = "CONNECTION_HANDLER", class_name = "ConnectionHandler" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["ConnectionHandler"]
+
 # Secrets (set via wrangler secret put):
 # LINEAR_CLIENT_ID - OAuth client ID from Linear
 # LINEAR_CLIENT_SECRET - OAuth client secret from Linear
 # WEBHOOK_SECRET - Webhook signing secret from Linear (optional)
-# TUNNEL_URL - Public URL that forwards to localhost (e.g., ngrok)
