@@ -10,7 +10,7 @@ Deploy AI agents with a simple YAML config. Code execution stays local, only web
 
 ```mermaid
 flowchart LR
-    Linear -->|webhook| Proxy[Proxy\nCloudflare Worker]
+    Linear -->|webhook| Proxy[Proxy]
     CLI[Local CLI] -->|WebSocket| Proxy
     Proxy -->|forward| CLI
     CLI --> Claude[Claude Code]
@@ -106,13 +106,16 @@ sniff logs              # View execution logs
 sniff/
 ├── apps/
 │   ├── cli/              # CLI application
-│   └── proxy/            # Cloudflare Worker
+│   ├── proxy/            # Cloudflare Worker
+│   ├── web/              # Web application
+│   └── docs/             # Documentation site
 ├── packages/
 │   ├── core/             # Shared types, env config, logger
 │   ├── config/           # Zod schemas, YAML loading
+│   ├── connection/       # WebSocket CLI-proxy communication
 │   ├── linear/           # Webhook parsing, API client
 │   ├── orchestrator/     # Server, worktree manager
-│   ├── runner-claude/    # Claude Code CLI wrapper
+│   ├── runner-claude/    # Claude Code SDK wrapper
 │   └── storage/          # Filesystem storage (~/.sniff/)
 ├── sniff.yml             # Your agent configuration
 ├── sniff.yml.example     # Example configuration
