@@ -9,16 +9,15 @@ Deploy AI agents with a simple YAML config. Code execution stays local, only web
 ```mermaid
 flowchart LR
     Linear -->|webhook| Proxy[Proxy\nCloudflare Worker]
-    Proxy -->|forward| Tunnel[Your Tunnel\nngrok/cloudflared]
-    Tunnel --> Agent[Local Agent\nBun Server]
-    Agent --> Runner[Claude Code CLI]
-    Agent --> Worktree[Git Worktree\nisolated execution]
-    Runner --> Worktree
+    CLI[Local CLI] -->|WebSocket| Proxy
+    Proxy -->|forward| CLI
+    CLI --> Claude[Claude Code]
+    CLI --> Worktree[Git Worktree]
 ```
 
 - **Local-first**: Agents run on your machine with full codebase access
 - **Isolated execution**: Each issue gets its own git worktree
-- **Multi-runner support**: Claude Code, Gemini CLI, Codex CLI (coming soon)
+- **Linear Agents API**: Native integration with Linear's agent platform
 - **No database**: Config from YAML, tokens stored locally in `~/.sniff/`
 
 ## Quick Start
@@ -51,29 +50,23 @@ bun run apps/cli/src/index.ts start
 **sniff.yml** - Agent definitions (commit to git):
 
 ```yaml
-version: "1.1"
+version: "2.0"
 
 agents:
   - id: triage-agent
     name: Triage Agent
-    system_prompt: |
+    label: triage # Triggered when this label is applied
+    systemPrompt: |
       You are a triage agent. When assigned an issue:
       1. Analyze the issue description
       2. Explore the codebase for context
       3. Suggest next steps or solutions
-
     runner:
-      type: claude
-      max_turns: 10
-      allowed_tools:
-        - Read
-        - Glob
-        - Grep
-
-    triggers:
-      labels:
-        - triage
-        - bug
+      claude:
+        allowedTools:
+          - Read
+          - Glob
+          - Grep
 ```
 
 **.env** - Environment config (do not commit):
@@ -92,17 +85,17 @@ sniff validate          # Validate configuration
 sniff auth linear       # Authenticate with Linear (OAuth)
 sniff start             # Start local agent server
 sniff stop              # Stop running agent
-sniff status            # Show agent and tunnel status
+sniff status            # Show agent status
 sniff logs              # View execution logs
 ```
 
 ## How It Works
 
-1. **Linear webhook fires** → Issue created/updated with matching label
-2. **Proxy forwards** → Cloudflare Worker routes to your tunnel
-3. **Local server receives** → Validates webhook, finds matching agent
+1. **CLI connects** → WebSocket connection to cloud proxy
+2. **Linear webhook fires** → Issue assigned to agent or label applied
+3. **Proxy forwards** → Routes webhook to your CLI via WebSocket
 4. **Worktree created** → Git worktree for isolated execution
-5. **Runner executes** → Claude Code CLI runs with your system prompt
+5. **Claude executes** → Runs with your system prompt and tool restrictions
 6. **Results posted** → Agent response appears in Linear
 
 ## Project Structure
@@ -133,8 +126,6 @@ sniff/
 | `LINEAR_WEBHOOK_SECRET` | No       | -       | Webhook signature verification |
 
 Tokens are stored locally in `~/.sniff/tokens/` after running `sniff auth`.
-
-**Note:** Start your tunnel manually (e.g., `ngrok http 3847`) and set `TUNNEL_URL` in `apps/proxy/.env`.
 
 ## Development
 
@@ -172,5 +163,5 @@ MIT
 
 ## Support
 
-- **Issues**: [github.com/sniff-dev/sniff/issues](https://github.com/caiopizzol/sniff/issues)
+- **Issues**: [github.com/caiopizzol/sniff/issues](https://github.com/caiopizzol/sniff/issues)
 - **Discord**: [discord.gg/huk9sSQCJA](https://discord.gg/huk9sSQCJA)
