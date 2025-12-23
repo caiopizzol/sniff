@@ -6,7 +6,7 @@
  */
 
 /** Default proxy URL for users not self-hosting */
-const DEFAULT_PROXY_URL = 'https://api.sniff.to'
+const DEFAULT_PROXY_URL = 'https://proxy.sniff.to'
 
 export interface EnvConfig {
   /** Proxy URL for OAuth and webhook forwarding */

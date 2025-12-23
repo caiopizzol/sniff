@@ -21,15 +21,17 @@ Like Docker Compose for AI agents.
 ```mermaid
 flowchart LR
   Linear[Linear<br/>Webhooks] --> Proxy[Cloudflare<br/>Worker Proxy]
-  Proxy --> Tunnel[Tunnel<br/>ngrok/cloudflared]
-  Tunnel --> CLI[Sniff CLI<br/>Your Machine]
+  Proxy <--> CLI[Sniff CLI<br/>Your Machine]
   CLI --> SDK[Claude<br/>Agent SDK]
 ```
 
-1. **Linear sends webhook** → Issue agent assigned or mentioned
-2. **Proxy forwards** → Your Cloudflare Worker forwards to local CLI via tunnel
-3. **Agent runs** → Claude Agent SDK processes with your system prompt and tools
-4. **Response posted** → Agent replies in Linear
+1. **CLI connects** → Establishes WebSocket connection to cloud proxy
+2. **Linear sends webhook** → Issue agent assigned or mentioned
+3. **Proxy forwards** → Webhook delivered to CLI through WebSocket
+4. **Agent runs** → Claude Agent SDK processes with your system prompt and tools
+5. **Response posted** → Agent replies in Linear
+
+No tunnels or port forwarding needed - CLI connects outbound to the proxy.
 
 ## What Can Agents Do?
 
@@ -71,5 +73,5 @@ agents:
 Ready to deploy your first agent?
 
 <Card title="Quickstart" icon="rocket" href="/quickstart">
-  Deploy an agent in 10 minutes
+  Deploy an agent in 5 minutes
 </Card>

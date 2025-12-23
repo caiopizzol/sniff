@@ -12,8 +12,7 @@ Sniff connects Linear to Claude Agent SDK through a proxy and webhook system. Wh
 ```mermaid
 flowchart LR
   Linear[Linear] -->|Webhook| Proxy[Cloudflare<br/>Worker Proxy]
-  Proxy -->|Forward| Tunnel[Tunnel<br/>ngrok/cloudflared]
-  Tunnel -->|HTTP| CLI[Sniff CLI<br/>Your Machine]
+  Proxy <-->|WebSocket| CLI[Sniff CLI<br/>Your Machine]
   CLI -->|Run| SDK[Claude<br/>Agent SDK]
   SDK -->|Comment| Linear
 ```
@@ -23,10 +22,11 @@ flowchart LR
 | Component            | Role                                                             |
 | -------------------- | ---------------------------------------------------------------- |
 | **Linear**           | Sends webhooks when agent assigned or mentioned                  |
-| **Proxy**            | Cloudflare Worker that handles OAuth and forwards webhooks       |
-| **Tunnel**           | ngrok or cloudflared that exposes your local CLI to the internet |
-| **Sniff CLI**        | Local server that receives webhooks and runs agents              |
+| **Proxy**            | Cloudflare Worker that handles OAuth and routes webhooks         |
+| **Sniff CLI**        | Connects to proxy via WebSocket and runs agents locally          |
 | **Claude Agent SDK** | Executes agents with tools (Read, Write, Edit, Bash, etc.)       |
+
+The CLI initiates an outbound WebSocket connection to the proxy - no tunnels or port forwarding needed.
 
 ## OAuth Flow
 
@@ -102,7 +102,7 @@ Linear sends a webhook to your proxy when an issue matches trigger criteria:
 
 ### 2. Webhook Forwarded
 
-The proxy verifies the signature (if configured) and forwards to your local CLI via the tunnel.
+The proxy verifies the signature (if configured) and pushes the webhook to your CLI through the WebSocket connection.
 
 ### 3. Agent Selected
 
@@ -229,15 +229,19 @@ The Cloudflare Worker proxy handles:
 - `GET /auth/linear/callback` - Receive OAuth code, exchange for tokens
 - `POST /auth/linear/refresh` - Refresh expired tokens
 
-### Webhook Forwarding
+### WebSocket Connection
 
-- `POST /webhook/linear` - Receive Linear webhook, forward to tunnel URL
+- `GET /connect` - CLI connects here via WebSocket for real-time webhook delivery
+
+### Webhook Routing
+
+- `POST /webhook/linear` - Receive Linear webhook, route to connected CLI
 
 ### Health Check
 
 - `GET /` or `GET /health` - Returns "OK"
 
-The proxy is stateless - it stores no data. Secrets (OAuth credentials, tunnel URL) are stored in Cloudflare.
+The proxy uses Durable Objects to maintain WebSocket connections. Each Linear organization gets its own connection handler.
 
 ## Next Steps
 

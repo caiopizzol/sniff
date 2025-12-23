@@ -1,24 +1,27 @@
 ---
 title: Quickstart
-description: Deploy your first AI agent in 10 minutes
+description: Deploy your first AI agent in 5 minutes
 ---
 
 # Quickstart
 
-Get your first AI agent running with the Sniff CLI and a local proxy.
+Get your first AI agent running in your Linear workspace.
 
 ## Prerequisites
 
 - [Bun](https://bun.sh) runtime
-- [ngrok](https://ngrok.com) or similar tunnel tool
 - A Linear workspace (admin access for OAuth app)
 
-## Step 1: Clone and Install
+## Step 1: Install the CLI
 
 ```bash
-git clone https://github.com/sniff-dev/sniff.git
-cd sniff
-bun install
+npm install -g @sniff-dev/cli
+```
+
+Or with bun:
+
+```bash
+bun install -g @sniff-dev/cli
 ```
 
 ## Step 2: Create Linear OAuth App
@@ -27,72 +30,28 @@ bun install
 2. Click **New OAuth Application**
 3. Fill in:
    - **Application name**: Sniff Agent
-   - **Redirect URI**: `http://localhost:8787/auth/linear/callback` (we'll update this later)
+   - **Redirect URI**: `https://sniff-proxy.workers.dev/auth/linear/callback`
 4. Under **Actor**, select **Application** (required for agent features)
 5. Click **Create**
-6. Copy the **Client ID** and **Client Secret**
 
-## Step 3: Configure Environment
-
-Copy and paste `.env.example` in a new `.env` file in the proxy directory:
-
-```bash
-cd apps/proxy && cp .env.example .env
-```
-
-```bash
-# apps/proxy/.env
-LINEAR_CLIENT_ID=your_client_id
-LINEAR_CLIENT_SECRET=your_client_secret
-TUNNEL_URL=http://localhost:3847
-```
-
-## Step 4: Start a Tunnel
-
-Open a new terminal and start a tunnel to expose the proxy:
-
-```bash
-ngrok http 8787
-```
-
-Copy the public URL (e.g., `https://abc123.ngrok.io`).
-
-Now update your Linear OAuth app's **Redirect URI** to:
-
-```
-https://abc123.ngrok.io/auth/linear/callback
-```
-
-## Step 5: Configure Linear Webhook
+## Step 3: Configure Linear Webhook
 
 1. Go to **Linear Settings** → **API** → **Webhooks**
 2. Click **New Webhook**
-3. Set the URL to your tunnel: `https://abc123.ngrok.io/webhook/linear`
+3. Set the URL to: `https://sniff-proxy.workers.dev/webhook/linear`
 4. Select App events: **Agent sessions events**
 5. Click **Create**
 
-## Step 6: Start the Proxy
+## Step 4: Initialize and Authenticate
+
+Navigate to your project directory and run:
 
 ```bash
-cd apps/proxy
-bun run dev
-```
-
-You should see:
-
-```
-Starting local server...
-Ready on http://localhost:8787
-```
-
-## Step 7: Initialize Agent Configuration
-
-Open a new terminal:
-
-```bash
-cd apps/cli
 sniff init
+sniff auth linear
 ```
+
+This creates a `sniff.yml` config and opens your browser for OAuth authentication.
 
 Edit the generated `sniff.yml`:
 
@@ -118,16 +77,7 @@ agents:
         maxTurns: 50
 ```
 
-## Step 8: Authenticate with Linear
-
-```bash
-export SNIFF_PROXY_URL=https://abc123.ngrok.io
-sniff auth linear
-```
-
-This opens your browser for OAuth. After authorizing, tokens are stored locally.
-
-## Step 9: Start the Agent
+## Step 5: Start the Agent
 
 ```bash
 sniff start
@@ -136,34 +86,19 @@ sniff start
 You should see:
 
 ```
-Sniff CLI starting...
-Loaded 1 agent(s): Engineer
-Server listening on http://localhost:3847
+Connecting to https://sniff-proxy.workers.dev...
+
+Connected to proxy
+Sniffing for webhooks...
+Press Ctrl+C to stop
 ```
 
-## Step 10: Test It Out
+## Test It Out
 
-1. Create a new issue in Linear
-2. Watch your terminal - the agent will process the issue
-3. Check Linear - the agent's response appears as a comment
-
-## Production Deployment
-
-For production, deploy the proxy to Cloudflare Workers:
-
-```bash
-cd apps/proxy
-
-# Set secrets
-npx wrangler secret put LINEAR_CLIENT_ID
-npx wrangler secret put LINEAR_CLIENT_SECRET
-npx wrangler secret put TUNNEL_URL  # Your production tunnel URL
-
-# Deploy
-npx wrangler deploy
-```
-
-Then update your Linear OAuth app and webhook to use the Cloudflare Worker URL.
+1. Go to Linear and open any issue
+2. Mention your agent with `@Sniff` or delegate the issue to it
+3. Watch your terminal - the agent will process the request
+4. Check Linear - the agent's response appears as a comment
 
 ## Next Steps
 
@@ -180,28 +115,23 @@ Then update your Linear OAuth app and webhook to use the Cloudflare Worker URL.
 
 <AccordionGroup>
   <Accordion title="OAuth fails or times out">
-    - Verify the redirect URI in Linear matches your tunnel URL + `/auth/linear/callback`
-    - Check that the proxy is running: `bun run dev`
-    - Ensure ngrok is forwarding to port 8787
+    - Verify the redirect URI in Linear matches `https://sniff-proxy.workers.dev/auth/linear/callback`
+    - Try re-authenticating: `sniff auth linear --force`
   </Accordion>
 
-{" "}
+  <Accordion title="Connection fails">
+    - Check your internet connection
+    - Verify you've authenticated: `sniff auth linear`
+    - Try with verbose logging: `sniff start -v`
+  </Accordion>
 
-<Accordion title="Webhook not reaching CLI">
-  - Check the proxy logs for incoming webhook requests - Verify TUNNEL_URL in
-  `.dev.vars` is `http://localhost:3847` - Ensure the CLI is running: `sniff
-  start`
-</Accordion>
-
-{" "}
-
-<Accordion title="Agent not responding to issues">
-  - Verify the issue has the correct label (matches `label` in config) - Check
-  CLI logs for errors - Ensure Linear webhook is pointing to your tunnel URL
-</Accordion>
+  <Accordion title="Agent not responding to issues">
+    - Verify you've set up the webhook in Linear Settings → API → Webhooks
+    - Check that webhook URL is `https://sniff-proxy.workers.dev/webhook/linear`
+    - Ensure you're mentioning or delegating to the agent correctly
+  </Accordion>
 
   <Accordion title="Token refresh errors">
     - Re-authenticate: `sniff auth linear --force`
-    - Verify LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET are correct in `.dev.vars`
   </Accordion>
 </AccordionGroup>
