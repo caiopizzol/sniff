@@ -83,7 +83,11 @@ export async function handleOAuthCallback(request: Request, env: Env): Promise<R
 
   // Decode state to get callback URL
   const state = stateParam ? decodeState(stateParam) : null
-  const callbackUrl = state?.callback || env.TUNNEL_URL
+  const callbackUrl = state?.callback
+
+  if (!callbackUrl) {
+    return new Response('Missing callback URL in state', { status: 400 })
+  }
 
   // Exchange code for token
   const redirectUri = `${url.origin}/auth/linear/callback`
@@ -166,7 +170,7 @@ export async function handleOAuthCallback(request: Request, env: Env): Promise<R
  */
 export async function handleTokenRefresh(request: Request, env: Env): Promise<Response> {
   try {
-    const body = await request.json()
+    const body = (await request.json()) as { refreshToken?: string }
     const refreshToken = body?.refreshToken
 
     if (!refreshToken) {

@@ -12,5 +12,5 @@
     }
   },
   "include": ["apps/**/*.ts", "packages/**/*.ts"],
-  "exclude": ["node_modules", "dist", "apps/web", "apps/docs"]
+  "exclude": ["node_modules", "dist", "apps/web", "apps/docs", "apps/proxy"]
 }

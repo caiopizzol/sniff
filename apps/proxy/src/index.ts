@@ -3,12 +3,16 @@
  * @module @sniff-dev/proxy
  *
  * Cloudflare Worker that:
- * 1. Receives Linear webhooks and forwards them to the local agent
+ * 1. Receives Linear webhooks and forwards them to connected CLIs
  * 2. Handles OAuth callbacks and redirects to local
+ * 3. Maintains WebSocket connections with CLIs via Durable Objects
  */
 
 import { handleOAuth, handleOAuthCallback, handleTokenRefresh } from './routes/oauth'
 import { handleWebhook } from './routes/webhook'
+import { handleConnectionUpgrade } from './connection/handler'
+
+export { ConnectionHandler } from './connection/durable-object'
 
 export interface Env {
   // Secrets (set via wrangler secret put)
@@ -16,8 +20,8 @@ export interface Env {
   LINEAR_CLIENT_SECRET: string
   WEBHOOK_SECRET?: string
 
-  // Variables (set in wrangler.toml or dashboard)
-  TUNNEL_URL?: string
+  // Durable Objects
+  CONNECTION_HANDLER: DurableObjectNamespace
 }
 
 export default {
@@ -33,6 +37,11 @@ export default {
           'Access-Control-Allow-Headers': 'Content-Type, Authorization, Linear-Signature',
         },
       })
+    }
+
+    // WebSocket connection for CLI
+    if (url.pathname === '/connect') {
+      return handleConnectionUpgrade(request, env)
     }
 
     // Webhook endpoint

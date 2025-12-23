@@ -23,9 +23,10 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.73"
+    "@anthropic-ai/claude-agent-sdk": "^0.1.76"
   },
   "devDependencies": {
+    "@sniff/connection": "workspace:*",
     "@sniff/core": "workspace:*",
     "@sniff/config": "workspace:*",
     "@sniff/storage": "workspace:*",
