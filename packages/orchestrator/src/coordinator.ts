@@ -10,8 +10,10 @@ import {
   type LinearClient,
   buildPromptFromSession,
   fetchAttachmentMetadata,
+  fetchIssueRelations,
   formatAttachmentMessagesForPrompt,
   formatAttachmentsForPrompt,
+  formatRelatedIssuesForPrompt,
   prefetchLinearAttachments,
 } from '@sniff/linear'
 import type { WorktreeManager } from './worktree'
@@ -160,7 +162,7 @@ export class Coordinator {
         return
       }
 
-      // 5. Pre-fetch Linear attachments and metadata if we have an access token
+      // 5. Pre-fetch Linear attachments, metadata, and relations if we have an access token
       let attachmentsContext = ''
       if (this.linearAccessToken) {
         try {
@@ -175,6 +177,10 @@ export class Coordinator {
           // Fetch attachment metadata (Slack messages, customer requests, etc.)
           const metadata = await fetchAttachmentMetadata(event.issue.id, this.linearAccessToken)
           attachmentsContext += formatAttachmentMessagesForPrompt(metadata)
+
+          // Fetch related issues (blocking, blocked-by, duplicates, etc.)
+          const relations = await fetchIssueRelations(event.issue.id, this.linearAccessToken)
+          attachmentsContext += formatRelatedIssuesForPrompt(relations)
         } catch (error) {
           logger.warn('Failed to pre-fetch attachments', {
             error: error instanceof Error ? error.message : String(error),
