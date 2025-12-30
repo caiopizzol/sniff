@@ -1,6 +1,6 @@
 {
   "name": "@sniff-dev/proxy",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "license": "MIT",
   "author": "Sniff <hello@sniff.to>",
   "description": "Cloudflare Worker proxy for Sniff webhooks",
