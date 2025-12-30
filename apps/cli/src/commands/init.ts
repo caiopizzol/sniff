@@ -27,34 +27,11 @@ agents:
           - Grep
 `
 
-const ENV_TEMPLATE = `# Sniff CLI Environment Configuration
-# Copy to .env and fill in your values
-
-# =============================================================================
-# REQUIRED
-# =============================================================================
-
-# Your deployed proxy URL (Cloudflare Worker)
-SNIFF_PROXY_URL=https://your-proxy.workers.dev
-
-# =============================================================================
-# OPTIONAL
-# =============================================================================
-
-# Local server port (default: 3847)
-# SNIFF_PORT=3847
-
-# Linear webhook secret for signature verification
-# Must match WEBHOOK_SECRET in your proxy
-# LINEAR_WEBHOOK_SECRET=
-`
-
 export const initCommand = new Command('init')
   .description('Create a new sniff.yml configuration file')
   .option('-f, --force', 'Overwrite existing config file')
   .action(async (options) => {
     const configPath = 'sniff.yml'
-    const envPath = '.env.example'
     const configFile = Bun.file(configPath)
 
     if ((await configFile.exists()) && !options.force) {
@@ -65,18 +42,9 @@ export const initCommand = new Command('init')
     await Bun.write(configPath, SNIFF_YML_TEMPLATE)
     console.log('Created sniff.yml')
 
-    // Create .env.example if it doesn't exist
-    const envFile = Bun.file(envPath)
-    if (!(await envFile.exists())) {
-      await Bun.write(envPath, ENV_TEMPLATE)
-      console.log('Created .env.example')
-    }
-
     console.log('')
     console.log('Next steps:')
-    console.log('  1. Copy .env.example to .env and fill in your values')
-    console.log('  2. Deploy your proxy worker: cd apps/proxy && bunx wrangler deploy')
-    console.log('  3. Update SNIFF_PROXY_URL in .env with your proxy URL')
-    console.log('  4. Authenticate with Linear: sniff auth linear')
-    console.log('  5. Start your agent: sniff start')
+    console.log('  1. Authenticate with Linear: sniff auth linear')
+    console.log('  2. Customize sniff.yml with your agent configuration')
+    console.log('  3. Start your agent: sniff start')
   })

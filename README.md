@@ -36,10 +36,6 @@ bun install
 # Initialize config
 bun run apps/cli/src/index.ts init
 
-# Set up environment
-cp .env.example .env
-# Edit .env with your proxy URL
-
 # Authenticate with Linear
 bun run apps/cli/src/index.ts auth linear
 
@@ -71,18 +67,10 @@ agents:
           - Grep
 ```
 
-**.env** - Environment config (do not commit):
-
-```bash
-SNIFF_PROXY_URL=https://your-proxy.workers.dev
-SNIFF_PORT=3847
-LINEAR_WEBHOOK_SECRET=xxx  # optional
-```
-
 ## CLI Commands
 
 ```bash
-sniff init              # Create sniff.yml and .env.example
+sniff init              # Create sniff.yml
 sniff validate          # Validate configuration
 sniff auth linear       # Authenticate with Linear (OAuth)
 sniff start             # Start local agent server
@@ -117,18 +105,18 @@ sniff/
 │   ├── orchestrator/     # Server, worktree manager
 │   ├── runner-claude/    # Claude Code SDK wrapper
 │   └── storage/          # Filesystem storage (~/.sniff/)
-├── sniff.yml             # Your agent configuration
-├── sniff.yml.example     # Example configuration
-└── .env.example          # Environment template
+└── sniff.yml             # Your agent configuration
 ```
 
 ## Environment Variables
 
-| Variable                | Required | Default | Description                    |
-| ----------------------- | -------- | ------- | ------------------------------ |
-| `SNIFF_PROXY_URL`       | Yes      | -       | Your deployed proxy URL        |
-| `SNIFF_PORT`            | No       | `3847`  | Local server port              |
-| `LINEAR_WEBHOOK_SECRET` | No       | -       | Webhook signature verification |
+All environment variables are optional with sensible defaults:
+
+| Variable                | Default                    | Description                    |
+| ----------------------- | -------------------------- | ------------------------------ |
+| `SNIFF_PROXY_URL`       | `https://proxy.sniff.to`   | Proxy URL for webhooks         |
+| `SNIFF_PORT`            | `3847`                     | Local server port              |
+| `LINEAR_WEBHOOK_SECRET` | -                          | Webhook signature verification |
 
 Tokens are stored locally in `~/.sniff/tokens/` after running `sniff auth`.
 
@@ -151,16 +139,16 @@ bun run lint
 bun test
 ```
 
-## Proxy Deployment
+## Self-Hosted Proxy (Optional)
 
-Deploy the Cloudflare Worker to receive webhooks:
+By default, Sniff uses `https://proxy.sniff.to`. To run your own proxy:
 
 ```bash
 cd apps/proxy
 bunx wrangler deploy
 ```
 
-Then set `SNIFF_PROXY_URL` in your `.env` and configure Linear webhooks to point to `https://your-proxy.workers.dev/webhook/linear`.
+Then set `SNIFF_PROXY_URL=https://your-proxy.workers.dev` and configure Linear webhooks to point to `https://your-proxy.workers.dev/webhook/linear`.
 
 ## License
 
