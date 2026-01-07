@@ -1,10 +1,21 @@
 /**
- * auth command - Authenticate with platforms via OAuth
+ * auth command - Authenticate with Linear via OAuth
+ *
+ * New architecture:
+ * - User runs `sniff auth linear`
+ * - CLI opens browser to proxy OAuth endpoint
+ * - Proxy handles all OAuth logic:
+ *   - User authentication
+ *   - Admin detection
+ *   - Org setup (actor=app OAuth) if admin and org not configured
+ *   - User registration if org already configured
+ * - Proxy POSTs result (user info, not tokens) to CLI
+ * - CLI stores user credentials
  */
 
 import { getEnvConfig } from '@sniff/core'
-import { LocalServer, type OAuthTokens } from '@sniff/orchestrator'
-import { ensureDirectories, ensureLocalDirectories, tokenStorage } from '@sniff/storage'
+import { LocalServer, type AuthResult } from '@sniff/orchestrator'
+import { credentialStorage, ensureDirectories, ensureLocalDirectories } from '@sniff/storage'
 import { Command } from 'commander'
 
 export const authCommand = new Command('auth')
@@ -22,8 +33,9 @@ export const authCommand = new Command('auth')
     }
 
     // Check if already authenticated
-    if (!options.force && (await tokenStorage.has('linear'))) {
-      console.log('Already authenticated with Linear')
+    if (!options.force && (await credentialStorage.has('linear'))) {
+      const creds = await credentialStorage.get('linear')
+      console.log(`Already authenticated with Linear (${creds?.organizationName})`)
       console.log('Use --force to re-authenticate')
       return
     }
@@ -32,40 +44,36 @@ export const authCommand = new Command('auth')
     const env = getEnvConfig()
     const port = options.port ? parseInt(options.port, 10) : env.port
 
-    console.log('Linear OAuth Authentication')
+    console.log('Linear Authentication')
     console.log('')
     console.log('Starting local callback server...')
 
-    // Create a promise that resolves when we receive tokens
-    let resolveTokens: (tokens: OAuthTokens) => void
-    const tokensPromise = new Promise<OAuthTokens>((resolve) => {
-      resolveTokens = resolve
+    // Create a promise that resolves when we receive auth result
+    let resolveResult: (result: AuthResult) => void
+    const resultPromise = new Promise<AuthResult>((resolve) => {
+      resolveResult = resolve
     })
 
-    // Start local server to receive OAuth callback
+    // Start local server to receive auth result from proxy
     const server = new LocalServer({
       port,
-      onOAuthCallback: async (callbackPlatform, tokens) => {
+      onAuthResult: async (callbackPlatform, result) => {
         if (callbackPlatform === 'linear') {
-          resolveTokens(tokens)
+          resolveResult(result)
           return new Response('OK', { status: 200 })
         }
         return new Response('Unknown platform', { status: 400 })
       },
     })
 
-    server.start()
+    const actualPort = server.start()
 
     // Build OAuth URL with local callback
-    // Note: The proxy will try to POST tokens to this URL
-    // If it fails (e.g., no tunnel), user can copy the token manually
-    const callbackUrl = `http://localhost:${port}`
+    const callbackUrl = `http://localhost:${actualPort}/auth/result`
     const authUrl = `${env.proxyUrl}/auth/linear?callback=${encodeURIComponent(callbackUrl)}`
 
     console.log('')
     console.log('Opening browser for authentication...')
-    console.log('')
-    console.log('Tip: If you see "Manage" instead of "Authorize", revoke the app first.')
     console.log('')
     console.log('If the browser does not open, visit:')
     console.log(`  ${authUrl}`)
@@ -83,33 +91,62 @@ export const authCommand = new Command('auth')
 
     console.log('Waiting for authentication...')
 
-    // Timeout after 30 seconds
+    // Timeout after 60 seconds (admin flow may take longer)
     const timeout = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('timeout')), 30000)
+      setTimeout(() => reject(new Error('timeout')), 60000)
     })
 
     try {
-      const tokens = await Promise.race([tokensPromise, timeout])
+      const result = await Promise.race([resultPromise, timeout])
 
-      // Replace existing tokens in the same location they were found
-      const storeLocally = await tokenStorage.hasLocal('linear')
+      if (result.success) {
+        // Store user credentials (not tokens!)
+        const credentials = {
+          userId: result.userId!,
+          email: result.email!,
+          name: result.name!,
+          organizationId: result.organizationId!,
+          organizationName: result.organizationName!,
+        }
 
-      if (storeLocally) {
-        await ensureLocalDirectories()
-        await storeTokensLocally(tokens)
+        // Store in same location as any existing credentials
+        const storeLocally = await credentialStorage.hasLocal('linear')
+
+        if (storeLocally) {
+          await ensureLocalDirectories()
+          await credentialStorage.setLocal('linear', credentials)
+        } else {
+          await credentialStorage.set('linear', credentials)
+        }
+
         console.log('')
-        console.log('[OK] Successfully authenticated with Linear!')
-        console.log('  Token stored locally in ./.sniff/tokens/')
+        if (result.action === 'configured') {
+          // Admin just set up the org
+          console.log(`[OK] Organization "${result.organizationName}" configured!`)
+          console.log('Your team can now run `sniff auth linear` to join.')
+        } else {
+          // User joined existing org
+          console.log(`[OK] Connected to "${result.organizationName}"!`)
+          console.log(`Authenticated as ${result.name} (${result.email})`)
+        }
+        console.log('')
+        console.log('Run `sniff start` to begin.')
       } else {
-        await storeTokens(tokens)
-        console.log('')
-        console.log('[OK] Successfully authenticated with Linear!')
-        console.log('  Token stored globally in ~/.sniff/tokens/')
+        // Error from proxy
+        console.error('')
+        if (result.error === 'org_not_configured') {
+          console.error('[X] Organization not configured with Sniff.')
+          console.error('    Ask a workspace admin to run `sniff auth linear` first.')
+        } else {
+          console.error(`[X] Authentication failed: ${result.message || result.error}`)
+        }
+        server.stop()
+        process.exit(1)
       }
     } catch (error) {
       console.error('')
       if (error instanceof Error && error.message === 'timeout') {
-        console.error('[X] Lost the trail. Please try again.')
+        console.error('[X] Authentication timed out. Please try again.')
       } else {
         console.error('[X] Authentication failed:', error instanceof Error ? error.message : error)
       }
@@ -120,49 +157,3 @@ export const authCommand = new Command('auth')
     server.stop()
     process.exit(0)
   })
-
-async function fetchOrganizationId(accessToken: string): Promise<string | undefined> {
-  try {
-    const response = await fetch('https://api.linear.app/graphql', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        query: `{ organization { id } }`,
-      }),
-    })
-
-    if (!response.ok) return undefined
-
-    const data = (await response.json()) as { data?: { organization: { id: string } } }
-    return data.data?.organization.id
-  } catch {
-    return undefined
-  }
-}
-
-async function storeTokens(tokens: OAuthTokens) {
-  const organizationId = await fetchOrganizationId(tokens.access_token)
-  await tokenStorage.set('linear', {
-    accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token,
-    tokenType: tokens.token_type,
-    scope: tokens.scope,
-    expiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : undefined,
-    organizationId,
-  })
-}
-
-async function storeTokensLocally(tokens: OAuthTokens) {
-  const organizationId = await fetchOrganizationId(tokens.access_token)
-  await tokenStorage.setLocal('linear', {
-    accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token,
-    tokenType: tokens.token_type,
-    scope: tokens.scope,
-    expiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : undefined,
-    organizationId,
-  })
-}

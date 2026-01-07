@@ -8,6 +8,7 @@ export interface LocalServerOptions {
   port: number
   onWebhook?: (request: Request) => Promise<Response>
   onOAuthCallback?: (platform: string, tokens: OAuthTokens) => Promise<Response>
+  onAuthResult?: (platform: string, result: AuthResult) => Promise<Response>
   onHealth?: () => Promise<Response>
 }
 
@@ -17,6 +18,22 @@ export interface OAuthTokens {
   expires_in?: number
   refresh_token?: string
   scope?: string
+}
+
+/**
+ * Auth result from proxy (new architecture)
+ * The proxy handles OAuth and returns user info, not tokens
+ */
+export interface AuthResult {
+  success: boolean
+  action?: 'joined' | 'configured'
+  userId?: string
+  email?: string
+  name?: string
+  organizationId?: string
+  organizationName?: string
+  error?: string
+  message?: string
 }
 
 export class LocalServer {
@@ -61,7 +78,7 @@ export class LocalServer {
               return new Response(null, { status: 204, headers: corsHeaders })
             }
 
-            // OAuth callback from proxy
+            // OAuth callback from proxy (legacy)
             if (url.pathname === '/oauth/callback' && request.method === 'POST') {
               if (!onOAuthCallback) {
                 return new Response('OAuth callback not configured', { status: 404, headers: corsHeaders })
@@ -80,6 +97,36 @@ export class LocalServer {
                 })
               } catch (error) {
                 logger.error('OAuth callback error', {
+                  error: error instanceof Error ? error.message : String(error),
+                })
+                return new Response('Invalid request', { status: 400, headers: corsHeaders })
+              }
+            }
+
+            // Handle CORS preflight for auth result
+            if (url.pathname === '/auth/result' && request.method === 'OPTIONS') {
+              return new Response(null, { status: 204, headers: corsHeaders })
+            }
+
+            // Auth result from proxy (new architecture)
+            if (url.pathname === '/auth/result' && request.method === 'POST') {
+              const { onAuthResult } = this.options
+              if (!onAuthResult) {
+                return new Response('Auth result handler not configured', { status: 404, headers: corsHeaders })
+              }
+              try {
+                const body = (await request.json()) as { platform: string; result: AuthResult }
+                const response = await onAuthResult(body.platform, body.result)
+                const newHeaders = new Headers(response.headers)
+                for (const [key, value] of Object.entries(corsHeaders)) {
+                  newHeaders.set(key, value)
+                }
+                return new Response(response.body, {
+                  status: response.status,
+                  headers: newHeaders,
+                })
+              } catch (error) {
+                logger.error('Auth result callback error', {
                   error: error instanceof Error ? error.message : String(error),
                 })
                 return new Response('Invalid request', { status: 400, headers: corsHeaders })

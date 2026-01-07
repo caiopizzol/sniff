@@ -12,6 +12,18 @@ export interface OAuth2Tokens {
   organizationId?: string
 }
 
+/**
+ * User credentials for proxy-managed token architecture
+ * The proxy holds the org's agent token; CLI only stores user identity
+ */
+export interface UserCredentials {
+  userId: string
+  email: string
+  name: string
+  organizationId: string
+  organizationName: string
+}
+
 export interface TokenStorage {
   /** Get tokens for a platform */
   get(platform: string): Promise<OAuth2Tokens | null>
@@ -20,6 +32,17 @@ export interface TokenStorage {
   /** Delete tokens for a platform */
   delete(platform: string): Promise<void>
   /** Check if tokens exist for a platform */
+  has(platform: string): Promise<boolean>
+}
+
+export interface CredentialStorage {
+  /** Get user credentials for a platform */
+  get(platform: string): Promise<UserCredentials | null>
+  /** Set user credentials for a platform */
+  set(platform: string, credentials: UserCredentials): Promise<void>
+  /** Delete credentials for a platform */
+  delete(platform: string): Promise<void>
+  /** Check if credentials exist for a platform */
   has(platform: string): Promise<boolean>
 }
 

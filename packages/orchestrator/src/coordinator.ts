@@ -5,17 +5,7 @@
 import type { AgentConfig, ClaudeRunnerOptions, Config } from '@sniff/config'
 import type { AgentRunEvent, LinearWebhookEvent, Runner, RunnerContext } from '@sniff/core'
 import { logger } from '@sniff/core'
-import {
-  type AgentSessionEvent,
-  type LinearClient,
-  buildPromptFromSession,
-  fetchAttachmentMetadata,
-  fetchIssueRelations,
-  formatAttachmentMessagesForPrompt,
-  formatAttachmentsForPrompt,
-  formatRelatedIssuesForPrompt,
-  prefetchLinearAttachments,
-} from '@sniff/linear'
+import { type AgentSessionEvent, type LinearClient, buildPromptFromSession } from '@sniff/linear'
 import type { WorktreeManager } from './worktree'
 
 export interface CoordinatorOptions {
@@ -23,8 +13,6 @@ export interface CoordinatorOptions {
   runner: Runner
   worktreeManager: WorktreeManager
   repositoryPath: string
-  /** Linear OAuth access token for auto-injecting MCP */
-  linearAccessToken?: string
 }
 
 export class Coordinator {
@@ -32,7 +20,6 @@ export class Coordinator {
   private runner: Runner
   private worktreeManager: WorktreeManager
   private repositoryPath: string
-  private linearAccessToken?: string
   /** Track active sessions for stop handling */
   private activeSessions: Map<string, { runner: Runner }> = new Map()
 
@@ -41,7 +28,6 @@ export class Coordinator {
     this.runner = options.runner
     this.worktreeManager = options.worktreeManager
     this.repositoryPath = options.repositoryPath
-    this.linearAccessToken = options.linearAccessToken
   }
 
   /**
@@ -75,19 +61,8 @@ export class Coordinator {
       return null
     }
 
-    // Auto-inject Linear MCP if not configured and we have an access token
-    let mcpServers = options.mcpServers
-    if (this.linearAccessToken && !mcpServers?.linear) {
-      logger.debug('Auto-injecting Linear MCP with OAuth token')
-      mcpServers = {
-        ...mcpServers,
-        linear: {
-          type: 'sse' as const,
-          url: 'https://mcp.linear.app/sse',
-          headers: { Authorization: `Bearer ${this.linearAccessToken}` },
-        },
-      }
-    }
+    // Note: Linear MCP is available via Linear's built-in agent infrastructure
+    // The proxy holds the org's agent token; CLI doesn't have direct access
 
     return {
       workingDirectory,
@@ -95,7 +70,7 @@ export class Coordinator {
       model: options.model,
       allowedTools: options.allowedTools,
       disallowedTools: options.disallowedTools,
-      mcpServers,
+      mcpServers: options.mcpServers,
       permissionMode: options.permissionMode ?? 'acceptEdits',
       maxTurns: options.maxTurns,
       env: options.env,
@@ -162,33 +137,10 @@ export class Coordinator {
         return
       }
 
-      // 5. Pre-fetch Linear attachments, metadata, and relations if we have an access token
-      let attachmentsContext = ''
-      if (this.linearAccessToken) {
-        try {
-          // Fetch file attachments (PDFs, images, etc.)
-          const attachments = await prefetchLinearAttachments(
-            event,
-            this.linearAccessToken,
-            worktreePath,
-          )
-          attachmentsContext += formatAttachmentsForPrompt(attachments)
-
-          // Fetch attachment metadata (Slack messages, customer requests, etc.)
-          const metadata = await fetchAttachmentMetadata(event.issue.id, this.linearAccessToken)
-          attachmentsContext += formatAttachmentMessagesForPrompt(metadata)
-
-          // Fetch related issues (blocking, blocked-by, duplicates, etc.)
-          const relations = await fetchIssueRelations(event.issue.id, this.linearAccessToken)
-          attachmentsContext += formatRelatedIssuesForPrompt(relations)
-        } catch (error) {
-          logger.warn('Failed to pre-fetch attachments', {
-            error: error instanceof Error ? error.message : String(error),
-          })
-        }
-      }
-
-      const message = buildPromptFromSession(event) + attachmentsContext
+      // 5. Build message from session
+      // Note: Attachment pre-fetching is not available in proxy relay architecture
+      // The agent can use Linear MCP to fetch attachments if needed
+      const message = buildPromptFromSession(event)
 
       logger.debug('Prompt sent to agent', { message })
 
@@ -377,11 +329,9 @@ export class Coordinator {
   ): Promise<{ agent: AgentConfig; labels: string[]; teamKey: string } | null> {
     try {
       const issue = await client.getIssue(issueId)
-      const labels = await issue.labels()
-      const team = await issue.team
 
-      const labelNames = labels.nodes.map((l) => l.name)
-      const teamKey = team?.key ?? ''
+      const labelNames = issue.labels.nodes.map((l) => l.name)
+      const teamKey = issue.team?.key ?? ''
 
       const agent = this.findAgent(labelNames, teamKey)
       if (agent) {

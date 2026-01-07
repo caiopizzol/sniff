@@ -8,7 +8,7 @@
  * 3. Maintains WebSocket connections with CLIs via Durable Objects
  */
 
-import { handleOAuth, handleOAuthCallback, handleTokenRefresh } from './routes/oauth'
+import { handleOAuth, handleOAuthCallback, handleAgentOAuthCallback, handleTokenRefresh } from './routes/oauth'
 import { handleWebhook } from './routes/webhook'
 import { handleConnectionUpgrade } from './connection/handler'
 
@@ -54,9 +54,14 @@ export default {
       return handleOAuth(request, env)
     }
 
-    // OAuth callback
+    // OAuth callback (user flow)
     if (url.pathname === '/auth/linear/callback' && request.method === 'GET') {
       return handleOAuthCallback(request, env)
+    }
+
+    // OAuth callback (agent/admin flow - actor=app)
+    if (url.pathname === '/auth/linear/agent-callback' && request.method === 'GET') {
+      return handleAgentOAuthCallback(request, env)
     }
 
     // Token refresh

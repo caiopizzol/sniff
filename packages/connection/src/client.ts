@@ -1,22 +1,33 @@
 /**
  * WebSocket client for connecting CLI to the Proxy
+ *
+ * New architecture:
+ * - Authenticates with userId (no token - proxy holds org token)
+ * - Provides apiCall() for relaying Linear API requests through proxy
  */
 
 import type {
   ConnectionMessage,
   AuthPayload,
-  AuthResponse,
   WebhookPayload,
+  ApiRequest,
+  ApiResponse,
 } from './types'
 
 export interface ConnectionClientOptions {
   proxyUrl: string
   organizationId: string
-  accessToken: string
+  userId: string
+  email: string
   onWebhook: (body: string, headers: Record<string, string>) => Promise<void>
   onConnected?: () => void
   onDisconnected?: () => void
   onError?: (error: Error) => void
+}
+
+interface PendingRequest {
+  resolve: (value: unknown) => void
+  reject: (error: Error) => void
 }
 
 export class ConnectionClient {
@@ -24,6 +35,7 @@ export class ConnectionClient {
   private pingInterval: ReturnType<typeof setInterval> | null = null
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null
   private shouldReconnect = true
+  private pendingRequests = new Map<string, PendingRequest>()
 
   constructor(private options: ConnectionClientOptions) {}
 
@@ -54,8 +66,12 @@ export class ConnectionClient {
             break
 
           case 'webhook':
-            const payload = message.payload as WebhookPayload
-            await this.options.onWebhook(payload.body, payload.headers)
+            const webhookPayload = message.payload as WebhookPayload
+            await this.options.onWebhook(webhookPayload.body, webhookPayload.headers)
+            break
+
+          case 'api_response':
+            this.handleApiResponse(message.payload as ApiResponse)
             break
 
           case 'pong':
@@ -87,11 +103,60 @@ export class ConnectionClient {
 
   private authenticate(): void {
     const payload: AuthPayload = {
-      accessToken: this.options.accessToken,
       organizationId: this.options.organizationId,
+      userId: this.options.userId,
+      email: this.options.email,
     }
 
     this.send({ type: 'auth', payload })
+  }
+
+  /**
+   * Make an API call through the proxy
+   * The proxy will forward the request to Linear using the org's agent token
+   */
+  async apiCall<T>(
+    endpoint: string,
+    options: { method?: ApiRequest['method']; body?: unknown } = {},
+  ): Promise<T> {
+    const id = crypto.randomUUID()
+
+    return new Promise((resolve, reject) => {
+      this.pendingRequests.set(id, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+      })
+
+      const payload: ApiRequest = {
+        id,
+        method: options.method ?? 'POST',
+        endpoint,
+        body: options.body,
+      }
+
+      this.send({ type: 'api', payload })
+
+      // Timeout after 30 seconds
+      setTimeout(() => {
+        if (this.pendingRequests.has(id)) {
+          this.pendingRequests.delete(id)
+          reject(new Error('API call timeout'))
+        }
+      }, 30_000)
+    })
+  }
+
+  private handleApiResponse(response: ApiResponse): void {
+    const pending = this.pendingRequests.get(response.id)
+    if (!pending) return
+
+    this.pendingRequests.delete(response.id)
+
+    if (response.error || response.status >= 400) {
+      pending.reject(new Error(response.error ?? `API error: ${response.status}`))
+    } else {
+      pending.resolve(response.body)
+    }
   }
 
   private send(message: ConnectionMessage): void {
@@ -123,5 +188,10 @@ export class ConnectionClient {
       clearTimeout(this.reconnectTimeout)
       this.reconnectTimeout = null
     }
+    // Reject all pending API requests
+    for (const [id, pending] of this.pendingRequests) {
+      pending.reject(new Error('Connection closed'))
+    }
+    this.pendingRequests.clear()
   }
 }

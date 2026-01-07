@@ -50,3 +50,17 @@ export async function forwardWebhookToConnection(
 
   return response.ok
 }
+
+/**
+ * Forward any request to the org's Durable Object
+ * Used for internal operations like checking/setting org token, registering users
+ */
+export async function forwardToConnectionHandler(
+  organizationId: string,
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  const id = env.CONNECTION_HANDLER.idFromName(organizationId)
+  const stub = env.CONNECTION_HANDLER.get(id)
+  return stub.fetch(request)
+}
